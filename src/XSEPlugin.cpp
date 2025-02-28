@@ -1,15 +1,14 @@
-#include "Hooks.h"
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
-#include "Feature.h"
 #include "FrameAnnotations.h"
+#include "Globals.h"
+#include "Hooks.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
-#include "VariableCache.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -81,10 +80,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPostPostLoad:
 		{
 			if (errors.empty()) {
-				auto state = State::GetSingleton();
+				auto state = globals::state;
 				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
-				TruePBR::GetSingleton()->PostPostLoad();
+				globals::truePBR->PostPostLoad();
 				//if (!state->IsFeatureDisabled("Upscaling")) {
 				//	Upscaling::InstallHooks();
 				//}
@@ -92,12 +91,12 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				FrameAnnotations::OnPostPostLoad();
 				DX12SwapChain::Install();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
+				auto shaderCache = globals::shaderCache;
 
-				shaderCache.ValidateDiskCache();
+				shaderCache->ValidateDiskCache();
 
-				if (shaderCache.UseFileWatcher())
-					shaderCache.StartFileWatcher();
+				if (shaderCache->UseFileWatcher())
+					shaderCache->StartFileWatcher();
 
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
@@ -116,17 +115,17 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			}
 
 			if (errors.empty()) {
-				VariableCache::GetSingleton()->OnDataLoaded();
+				globals::OnDataLoaded();
 				FrameAnnotations::OnDataLoaded();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
-				shaderCache.menuLoaded = true;
-				while (shaderCache.IsCompiling() && !shaderCache.backgroundCompilation) {
+				auto shaderCache = globals::shaderCache;
+				shaderCache->menuLoaded = true;
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
 					std::this_thread::sleep_for(100ms);
 				}
 
-				if (shaderCache.IsDiskCache()) {
-					shaderCache.WriteDiskCacheInfo();
+				if (shaderCache->IsDiskCache()) {
+					shaderCache->WriteDiskCacheInfo();
 				}
 
 				if (!REL::Module::IsVR()) {
@@ -134,7 +133,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
 				}
 
-				TruePBR::GetSingleton()->DataLoaded();
+				globals::truePBR->DataLoaded();
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
 						feature->DataLoaded();
@@ -166,7 +165,9 @@ bool Load()
 	auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener("SKSE", MessageHandler);
 
-	auto state = State::GetSingleton();
+	globals::ReInit();
+
+	auto state = globals::state;
 	state->Load();
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
