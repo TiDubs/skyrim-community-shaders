@@ -1232,8 +1232,8 @@ struct BSTempEffectSimpleDecal_SetupGeometry
 	{
 		func(decal, geometry, textureSet, blended);
 		auto* singleton = globals::truePBR;
-		auto property = geometry->GetGeometryRuntimeData().properties[1].get();
-		if (auto shaderProperty = property->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get()) : nullptr;
+		auto uncastedProperty = geometry->GetGeometryRuntimeData().properties[1].get();
+		if (auto shaderProperty = uncastedProperty->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(uncastedProperty) : nullptr;
 			shaderProperty != nullptr && singleton->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
