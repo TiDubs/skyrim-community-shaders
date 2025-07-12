@@ -194,6 +194,16 @@ namespace globals
 			perFrame = { REL::RelocationID(524768, 411384) };
 		}
 
+
+		{
+			using namespace rtti;
+			NiIntegerExtraDataRTTI = { RE::NiIntegerExtraData::Ni_RTTI };
+			BSLightingShaderPropertyRTTI = { RE::BSLightingShaderProperty::Ni_RTTI };
+			BSEffectShaderPropertyRTTI = { RE::BSEffectShaderProperty::Ni_RTTI };
+			NiParticleSystemRTTI = { RE::NiParticleSystem::Ni_RTTI };
+			NiBillboardNodeRTTI = { RE::NiBillboardNode::Ni_RTTI };
+		}
+
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
 		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(game::renderer->GetRuntimeData().context);
 		d3d::swapChain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);

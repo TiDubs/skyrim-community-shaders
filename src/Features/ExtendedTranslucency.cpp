@@ -24,9 +24,7 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 	globals::state->currentExtraFeatureDescriptor &= ~(ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift);
 	// TODO: PERFORMANCE: Caching the feature descriptor in map<RE::BSGeometry*, uint> if this get more complex
 	if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
-		static const REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI{ RE::NiIntegerExtraData::Ni_RTTI };
-		// netimmerse_cast<RE::NiIntegerExtraData*>(data) seems not working here
-		if (data->GetRTTI() == NiIntegerExtraDataRTTI.get()) {
+		if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
 			uint32_t material = static_cast<uint32_t>(static_cast<RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
 			if (material == MaterialModel::Disabled) {
 				// MaterialModel::Disabled (0) is the flag when this extra does not exist
