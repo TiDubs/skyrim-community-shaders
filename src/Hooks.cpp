@@ -1134,8 +1134,8 @@ namespace Hooks
 
 		// Patch EyePosition in BSLightingShader::SetupGeometry to always update due to additional effects which may require it
 		{
-			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75);
-			REL::safe_write(setupGeometryUpdateEyePosition + 6, uint8_t{ 1 });
+			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75, 0x78);
+			REL::safe_write(setupGeometryUpdateEyePosition + +REL::Relocate(6, 6, 7), uint8_t{ 1 });
 		}
 	}
 
