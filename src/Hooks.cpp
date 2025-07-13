@@ -1131,6 +1131,12 @@ namespace Hooks
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
+
+		// Patch EyePosition in BSLightingShader::SetupGeometry to always update due to additional effects which may require it
+		{
+			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75);
+			REL::safe_write(setupGeometryUpdateEyePosition + 6, uint8_t{ 1 });
+		}
 	}
 
 	/**
