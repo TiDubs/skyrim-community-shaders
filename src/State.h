@@ -2,9 +2,9 @@
 
 #include <Tracy/Tracy.hpp>
 #include <Tracy/TracyD3D11.hpp>
+#include <Windows.h>
 
 #include <Buffer.h>
-#include <chrono>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -26,6 +26,10 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+		
+		// Initialize QueryPerformanceCounter frequency
+		frameTimingFrequency.QuadPart = 0;
+		frameStartTime.QuadPart = 0;
 	}
 	std::lock_guard<std::mutex> Lock() { return std::lock_guard<std::mutex>(statsMutex); }
 
@@ -65,8 +69,9 @@ public:
 	float frameTimePerType[RE::BSShader::Type::Total + 1];
 	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1];
 
-	// Timing state for per-type frame time tracking
-	std::chrono::high_resolution_clock::time_point frameStartTime;
+	// Timing state for per-type frame time tracking using QueryPerformanceCounter
+	LARGE_INTEGER frameTimingFrequency;
+	LARGE_INTEGER frameStartTime;
 	bool frameTimingActive = false;
 
 	enum ConfigMode

@@ -1,6 +1,7 @@
 #include "State.h"
 
 #include <codecvt>
+#include <Windows.h>
 
 #include <pystring/pystring.h>
 
@@ -91,7 +92,10 @@ void State::Draw()
 				ft = 0.0f;
 
 			// Start timing for this frame
-			frameStartTime = std::chrono::high_resolution_clock::now();
+			if (frameTimingFrequency.QuadPart == 0) {
+				QueryPerformanceFrequency(&frameTimingFrequency);
+			}
+			QueryPerformanceCounter(&frameStartTime);
 			frameTimingActive = true;
 
 			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
@@ -101,8 +105,11 @@ void State::Draw()
 
 		// Track time for current shader type if timing is active
 		if (frameTimingActive && currentShader) {
-			auto currentTime = std::chrono::high_resolution_clock::now();
-			auto elapsed = std::chrono::duration<float, std::milli>(currentTime - frameStartTime).count();
+			LARGE_INTEGER currentTime;
+			QueryPerformanceCounter(&currentTime);
+			
+			// Calculate elapsed time in milliseconds
+			float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
 
 			// Add elapsed time to the current shader type
 			frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
