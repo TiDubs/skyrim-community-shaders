@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <Windows.h>
+
 namespace Util
 {
 	std::string GetFormattedVersion(const REL::Version& version);
@@ -41,6 +43,16 @@ namespace Util
 	 * Returns a human-readable string for the time elapsed since the given time point (e.g., '5s', '2m', '1h').
 	 */
 	std::string TimeAgoString(std::chrono::steady_clock::time_point last);
+
+	/**
+	 * Returns a human-readable string for the time elapsed since the given QueryPerformanceCounter time point (e.g., '5s', '2m', '1h').
+	 * Uses QueryPerformanceCounter for high-performance timing without std::chrono dependencies.
+	 * 
+	 * @param lastTime LARGE_INTEGER timestamp from QueryPerformanceCounter
+	 * @param frequency LARGE_INTEGER frequency from QueryPerformanceFrequency
+	 * @return Formatted string showing time elapsed (e.g., "5s", "2m", "1h")
+	 */
+	std::string TimeAgoStringQPC(const LARGE_INTEGER& lastTime, const LARGE_INTEGER& frequency);
 
 	/**
 	 * Formats a delta value with percentage difference for A/B test comparisons.
