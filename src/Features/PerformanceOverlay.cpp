@@ -362,11 +362,11 @@ void PerformanceOverlay::DrawOverlay()
 			QueryPerformanceFrequency(&this->perfOverlayState.GetOverlayTimingFrequencyRef());
 			QueryPerformanceCounter(&this->perfOverlayState.GetLastUpdateTimeRef());
 		}
-		
+
 		LARGE_INTEGER now;
 		QueryPerformanceCounter(&now);
-		float deltaTime = (now.QuadPart - this->perfOverlayState.GetLastUpdateTime().QuadPart) / 
-			static_cast<float>(this->perfOverlayState.GetOverlayTimingFrequencyRef().QuadPart);
+		float deltaTime = (now.QuadPart - this->perfOverlayState.GetLastUpdateTime().QuadPart) /
+		                  static_cast<float>(this->perfOverlayState.GetOverlayTimingFrequencyRef().QuadPart);
 		this->perfOverlayState.SetLastUpdateTime(now);
 
 		// Update graph values

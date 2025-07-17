@@ -122,18 +122,18 @@ namespace Util
 		if (lastTime.QuadPart == 0) {
 			return "0s";
 		}
-		
+
 		LARGE_INTEGER currentTime;
 		QueryPerformanceCounter(&currentTime);
-		
+
 		// Calculate elapsed seconds
 		int64_t elapsedTicks = currentTime.QuadPart - lastTime.QuadPart;
 		if (elapsedTicks < 0) {
 			return "0s";  // Handle case where clock went backwards
 		}
-		
+
 		int64_t elapsedSeconds = elapsedTicks / frequency.QuadPart;
-		
+
 		// Format the same way as TimeAgoString
 		if (elapsedSeconds < 60) {
 			return std::to_string(elapsedSeconds) + "s";
