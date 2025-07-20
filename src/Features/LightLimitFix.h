@@ -107,7 +107,8 @@ public:
 	{
 		uint NumStrictLights;
 		int RoomIndex;
-		uint pad0[2];
+		uint ShadowBitMask;
+		uint pad0;
 		LightData StrictLights[15];
 	};
 
@@ -171,6 +172,8 @@ public:
 	bool wasEmpty = false;
 	bool wasWorld = false;
 	int previousRoomIndex = -1;
+	uint previousShadowBitMask = 0;
+
 	Util::FrameChecker frameChecker;
 
 	virtual void SetupResources() override;
@@ -296,17 +299,17 @@ public:
 		{
 			stl::write_thunk_call<AIProcess_CalculateLightValue_GetLuminance>(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x1C9, 0x1D3));
 
-			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+			//stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 			stl::write_vfunc<0x6, BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
 
 			stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5fe));
 
-			stl::detour_thunk<NiNode_Destroy>(REL::RelocationID(68937, 70288));
+			//stl::detour_thunk<NiNode_Destroy>(REL::RelocationID(68937, 70288));
 
-			stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
-			stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
-			stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
+			//stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
+			//stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
+			//stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
 
 			logger::info("[LLF] Installed hooks");
 		}

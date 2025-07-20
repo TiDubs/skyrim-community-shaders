@@ -67,7 +67,9 @@ struct VS_OUTPUT
 #if defined(ENVMAP)
 	precise
 #endif  // ENVMAP
+#if defined(WORLD_MAP)
 		float3 InputPosition : TEXCOORD4;
+#endif		
 #if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3 TBN0 : TEXCOORD1;
 	float3 TBN1 : TEXCOORD2;
@@ -242,12 +244,8 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 	vsout.TexCoord0.xy = uv;
 
-#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SKINNED)
-	vsout.InputPosition.xyz = worldPosition.xyz;
-#	elif defined(WORLD_MAP)
+#	if defined(WORLD_MAP)
 	vsout.InputPosition.xyz = WorldMapOverlayParameters.xyz + worldPosition.xyz;
-#	else
-	vsout.InputPosition.xyz = inputPosition.xyz;
 #	endif
 
 #	if defined(SKINNED)
@@ -2505,7 +2503,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if !defined(LIGHT_LIMIT_FIX)
 	[loop] for (uint lightIndex = 0; lightIndex < numLights; lightIndex++)
 	{
-		float3 lightDirection = PointLightPosition[eyeIndex * numLights + lightIndex].xyz - input.InputPosition.xyz;
+		float3 lightDirection = PointLightPosition[eyeIndex * numLights + lightIndex].xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
 		float intensityFactor = saturate(lightDist / PointLightPosition[lightIndex].w);
 		if (intensityFactor == 1)
@@ -2623,9 +2621,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
-		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow && light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-			shadowComponent = shadowColor[light.shadowLightIndex];
-			lightShadow *= shadowComponent;
+		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
+			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				shadowComponent = shadowColor[light.shadowLightIndex];
+				lightShadow *= shadowComponent;
+			}
 		}
 
 		float3 normalizedLightDirection = normalize(lightDirection);
