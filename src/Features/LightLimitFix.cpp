@@ -303,8 +303,6 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 
 void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
 {
-	BSLightingShader_SetupGeometry_Before(a_pass);
-
 	auto shaderCache = globals::shaderCache;
 	auto isl = globals::features::inverseSquareLighting;
 
@@ -353,8 +351,6 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
 		strictLightDataTemp.ShadowBitMask |= (1 << shadowLightIndex);
 	}
-
-	BSLightingShader_SetupGeometry_After(a_pass);
 }
 
 void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
