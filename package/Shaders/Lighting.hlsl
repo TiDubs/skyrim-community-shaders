@@ -9,6 +9,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 
+#undef LIGHT_LIMIT_FIX
+
 #define LIGHTING
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
