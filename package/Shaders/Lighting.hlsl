@@ -67,7 +67,7 @@ struct VS_OUTPUT
 
 #if defined(WORLD_MAP)
 		float3 InputPosition : TEXCOORD4;
-#endif	
+#endif
 
 #if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3 TBN0 : TEXCOORD1;

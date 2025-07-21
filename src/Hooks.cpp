@@ -1125,13 +1125,13 @@ namespace Hooks
 				std::uint8_t patch[] = { 0x41, 0x83, 0xE4, 0x00 };  // and r12d, 0
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x65, patch, sizeof(patch));
 			} else {
-				std::uint8_t patch1[] = { 0xB8, 0x00, 0x00};  // mov eax, 0
+				std::uint8_t patch1[] = { 0xB8, 0x00, 0x00 };  // mov eax, 0
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x73, patch1, sizeof(patch1));
 
 				std::uint8_t patch2[] = { 0x45, 0x31, 0xC9 };  // xor r9d, r9d (zeros r9d)
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x36D, patch2, sizeof(patch2));
-								
-				std::uint8_t patch3[] = { 0x45, 0x31, 0xC0 };	// xor r8d, r8d (zeros r8d)
+
+				std::uint8_t patch3[] = { 0x45, 0x31, 0xC0 };  // xor r8d, r8d (zeros r8d)
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x378, patch3, sizeof(patch3));
 			}
 		}
