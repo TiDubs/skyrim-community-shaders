@@ -9,8 +9,6 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 
-#undef LIGHT_LIMIT_FIX
-
 #define LIGHTING
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
@@ -66,12 +64,11 @@ struct VS_OUTPUT
 	float2
 #endif  // (defined (PROJECTED_UV) && !defined(SKINNED)) || defined(LANDSCAPE)
 		TexCoord0 : TEXCOORD0;
-#if defined(ENVMAP)
-	precise
-#endif  // ENVMAP
+
 #if defined(WORLD_MAP)
 		float3 InputPosition : TEXCOORD4;
-#endif		
+#endif	
+
 #if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3 TBN0 : TEXCOORD1;
 	float3 TBN1 : TEXCOORD2;
@@ -85,21 +82,12 @@ struct VS_OUTPUT
 #elif defined(PROJECTED_UV) && !defined(SKINNED)
 	float3 TexProj : TEXCOORD7;
 #endif  // EYE
-	float3 ScreenNormalTransform0 : TEXCOORD8;
-	float3 ScreenNormalTransform1 : TEXCOORD9;
-	float3 ScreenNormalTransform2 : TEXCOORD10;
-	// #if !defined(VR)  // Position is normally not in VR, but perhaps we can use
-	// it.
+
 	float4 WorldPosition : POSITION1;
 	float4 PreviousWorldPosition : POSITION2;
-	// #endif // !VR
 	float4 Color : COLOR0;
 	float4 FogParam : COLOR1;
-#if !defined(VR)
-	row_major float3x4 World[1] : POSITION3;
-#else
-	row_major float3x4 World[2] : POSITION3;
-#endif  // VR
+
 #if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
 	float CullDistance : SV_CullDistance0;  // p11
@@ -309,26 +297,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.EyeNormal.xyz = normalize(worldPosition.xyz - mul(modelEyeCenter, transpose(worldMatrix)));
 #	endif  // EYE
 
-#	if defined(SKINNED)
-	float3x3 ScreenNormalTransform = mul(ScreenProj[eyeIndex], worldTbnTr);
-
-	vsout.ScreenNormalTransform0.xyz = ScreenNormalTransform[0];
-	vsout.ScreenNormalTransform1.xyz = ScreenNormalTransform[1];
-	vsout.ScreenNormalTransform2.xyz = ScreenNormalTransform[2];
-#	else
-	float3x4 transMat = mul(ScreenProj[eyeIndex], World[eyeIndex]);
-
-#		if defined(MODELSPACENORMALS)
-	vsout.ScreenNormalTransform0.xyz = transMat[0].xyz;
-	vsout.ScreenNormalTransform1.xyz = transMat[1].xyz;
-	vsout.ScreenNormalTransform2.xyz = transMat[2].xyz;
-#		else
-	vsout.ScreenNormalTransform0.xyz = mul(transMat[0].xyz, transpose(tbn));
-	vsout.ScreenNormalTransform1.xyz = mul(transMat[1].xyz, transpose(tbn));
-	vsout.ScreenNormalTransform2.xyz = mul(transMat[2].xyz, transpose(tbn));
-#		endif  // MODELSPACENORMALS
-#	endif      // SKINNED
-
 	vsout.WorldPosition = worldPosition;
 	vsout.PreviousWorldPosition = previousWorldPosition;
 
@@ -343,11 +311,6 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.FogParam.xyz = lerp(FogNearColor.xyz, FogFarColor.xyz, fogColorParam);
 	vsout.FogParam.w = fogColorParam;
-
-	vsout.World[0] = World[0];
-#	ifdef VR
-	vsout.World[1] = World[1];
-#	endif  // VR
 
 #	if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
