@@ -91,7 +91,7 @@ void State::DrawDebug()
 		}
 
 		Debug();
-		
+
 		updateShader = false;
 	}
 }
