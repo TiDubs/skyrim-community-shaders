@@ -124,10 +124,16 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
 
+	state->permutationData.VertexShaderDescriptor = vertexDescriptor;
+	state->permutationData.PixelShaderDescriptor = pixelDescriptor;
+
 	state->modifiedVertexDescriptor = vertexDescriptor;
 	state->modifiedPixelDescriptor = pixelDescriptor;
 
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
+
+	// Only check against non-shader bits
+	state->permutationData.PixelShaderDescriptor &= ~state->modifiedPixelDescriptor;
 
 	bool shaderFound = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
@@ -168,7 +174,7 @@ namespace EffectExtensions
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
 					auto state = globals::state;
-					state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
 				}
 			}
 		}
@@ -184,12 +190,12 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->isTree = false;
+			globals::state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsTree;
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->isTree = true;
+						globals::state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsTree;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -288,6 +294,18 @@ struct ID3D11Device_CreatePixelShader
 			RegisterShaderBytecode(*ppPixelShader, pShaderBytecode, BytecodeLength);
 
 		return hr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct ID3D11Device_CreateSamplerState
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
+	{
+		// Limit Anisotropy to 8x for performance
+		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
+		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
+		return func(This, &descCopy, ppSamplerState);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -605,6 +623,9 @@ namespace Hooks
 				stl::detour_vfunc<12, ID3D11Device_CreateVertexShader>(globals::d3d::device);
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
+
+			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+
 			globals::menu->Init();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -852,13 +873,6 @@ namespace Hooks
 		if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 			return;
 
-		// Separate deferred and forward blended decals
-		if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-			RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-			globals::state->blendedDecalRenderPasses.push_back(call);
-			return;
-		}
-
 		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 	}
 
@@ -872,13 +886,6 @@ namespace Hooks
 			if (globals::features::interiorSunShadows->loaded)
 				globals::features::interiorSunShadows->UpdateRasterStateCullMode(a_pass, a_technique);
 
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
-
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -890,13 +897,6 @@ namespace Hooks
 		{
 			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 				return;
-
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
@@ -963,12 +963,12 @@ namespace Hooks
 						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
 							isShader = globals::features::volumetricLighting->GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 						}
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
+					} else if (vl->loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
 						techniqueId = 0;
 						isShader = vl->GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
 						vl->SetDimensionsCB();
 						vl->SetGroupCountsHCS(threadGroupCountX);
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
+					} else if (vl->loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
 						techniqueId = 0;
 						isShader = vl->GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
 						vl->SetDimensionsCB();
@@ -1003,6 +1003,21 @@ namespace Hooks
 	{
 		PatchMemory(Address, Data.begin(), Data.size());
 	}
+
+	struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
+	{
+		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t RenderSpace)
+		{
+			if (globals::shaderCache->IsEnabled())
+				if (globals::features::lightLimitFix->loaded)
+					globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
+				else
+					func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, 0);
+			else
+				func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
@@ -1112,10 +1127,13 @@ namespace Hooks
 				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
 				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
 		}
+
 		if (!REL::Module::IsVR()) {
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
+
+		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
 
 	/**

@@ -289,6 +289,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 		return;
 
 	strictLightDataTemp.NumStrictLights = 0;
+	strictLightDataTemp.ShadowBitMask = 0;
 
 	strictLightDataTemp.RoomIndex = -1;
 	if (!roomNodes.empty()) {
@@ -300,15 +301,11 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 	}
 }
 
-void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
+void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass)
 {
-	auto shaderCache = globals::shaderCache;
 	auto isl = globals::features::inverseSquareLighting;
 
-	if (!shaderCache->IsEnabled())
-		return;
-
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == globals::game::smState->shadowSceneNode[0];
 
 	strictLightDataTemp.NumStrictLights = inWorld ? 0 : (a_pass->numLights - 1);
@@ -334,7 +331,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
-		if (bsLight->IsShadowLight()) {
+		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 			GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
 			light.shadowMaskIndex = shadowLightIndex;
@@ -342,6 +339,13 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		}
 
 		strictLightDataTemp.StrictLights[i] = light;
+	}
+
+	for (uint32_t i = 0; i < a_pass->numShadowLights; i++) {
+		auto bsLight = a_pass->sceneLights[i + 1];
+		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
+		GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
+		strictLightDataTemp.ShadowBitMask |= (1 << shadowLightIndex);
 	}
 }
 
@@ -354,19 +358,21 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 	if (!shaderCache->IsEnabled())
 		return;
 
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
-	const bool isEmpty = strictLightDataTemp.NumStrictLights == 0;
+	const auto isEmpty = strictLightDataTemp.NumStrictLights == 0;
 	const bool isWorld = accumulator->GetRuntimeData().activeShadowSceneNode == shadowSceneNode;
-	const int roomIndex = strictLightDataTemp.RoomIndex;
+	const auto roomIndex = strictLightDataTemp.RoomIndex;
+	const auto shadowBitMask = strictLightDataTemp.ShadowBitMask;
 
-	if (!isEmpty || (isEmpty && !wasEmpty) || isWorld != wasWorld || previousRoomIndex != roomIndex) {
+	if (!isEmpty || (isEmpty && !wasEmpty) || isWorld != wasWorld || previousRoomIndex != roomIndex || shadowBitMask != previousShadowBitMask) {
 		strictLightDataCB->Update(strictLightDataTemp);
 		wasEmpty = isEmpty;
 		wasWorld = isWorld;
 		previousRoomIndex = roomIndex;
+		previousShadowBitMask = shadowBitMask;
 	}
 
 	if (frameChecker.IsNewFrame()) {
@@ -1057,12 +1063,6 @@ float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE
 	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
 	globals::features::lightLimitFix->AddParticleLightLuminance(targetPosition, numHits, ret);
 	return ret;
-}
-
-void LightLimitFix::Hooks::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights::thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, Space RenderSpace)
-{
-	globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
-	func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
 }
 
 void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)

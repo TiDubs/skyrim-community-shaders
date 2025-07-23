@@ -983,11 +983,9 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 			}
 
-			std::array<float, 4> characterLightParams;
+			std::array<float, 4> characterLightParams{};  // in C++, arrays will be zero-initialized
 			if (smState->characterLightEnabled) {
 				std::copy_n(smState->characterLightParams, 4, characterLightParams.data());
-			} else {
-				std::fill_n(characterLightParams.data(), 4, 0.f);
 			}
 			shadowState->SetPSConstant(characterLightParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.CharacterLightParams);
 		}
@@ -1211,17 +1209,6 @@ struct TESForm_SetFormEditorID
 		auto* singleton = globals::truePBR;
 		singleton->editorIDs[form->GetFormID()] = editorId;
 		return true;
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct SetPerFrameBuffers
-{
-	static void thunk(void* renderer)
-	{
-		func(renderer);
-		auto* singleton = globals::truePBR;
-		singleton->SetupFrame();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -1564,9 +1551,6 @@ void TruePBR::PostPostLoad()
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
 
-	logger::info("Hooking SetPerFrameBuffers");
-	stl::detour_thunk<SetPerFrameBuffers>(REL::RelocationID(75570, 77371));
-
 	logger::info("Hooking BSTempEffectSimpleDecal");
 	stl::detour_thunk<BSTempEffectSimpleDecal_SetupGeometry>(REL::RelocationID(29253, 30108));
 
@@ -1606,10 +1590,44 @@ void TruePBR::SetupDefaultPBRLandTextureSet()
 
 void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
 {
-	for (uint32_t textureIndex = 0; textureIndex < ExtendedRendererState::NumPSTextures; ++textureIndex) {
-		if (extendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
-			a_context->PSSetShaderResources(ExtendedRendererState::FirstPSTexture + textureIndex, 1, &extendedRendererState.PSTexture[textureIndex]);
-		}
+	uint32_t mask = extendedRendererState.PSResourceModifiedBits;
+
+	if (mask == 0) [[likely]] {
+		// No dirty slots, early exit
+		return;
 	}
+
+	constexpr uint32_t firstTexture = ExtendedRendererState::FirstPSTexture;
+	auto& textures = extendedRendererState.PSTexture;
+
+	while (mask) {
+		unsigned long index;
+
+		// Find index of the least significant set bit
+		_BitScanForward(&index, mask);
+
+		// Start batching from this index
+		uint32_t batchStart = index;
+		uint32_t batchCount = 1;
+
+		// Check for consecutive set bits and batch them
+		uint32_t shiftedMask = mask >> (index + 1);
+		while ((shiftedMask & 1) != 0) {
+			++batchCount;
+			shiftedMask >>= 1;
+		}
+
+		// Issue one API call for this batch
+		a_context->PSSetShaderResources(
+			firstTexture + batchStart,
+			batchCount,
+			&textures[batchStart]);
+
+		// Clear the bits we just processed
+		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
+		mask &= ~clearMask;
+	}
+
+	// Reset modified bits
 	extendedRendererState.PSResourceModifiedBits = 0;
 }
