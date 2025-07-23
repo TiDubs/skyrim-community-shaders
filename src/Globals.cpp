@@ -207,7 +207,7 @@ namespace globals
 			ui = RE::UI::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
 
-			currentAccumulator = { REL::RelocationID(527650, 414600) };
+			currentAccumulator = { REL::VariantID(527650, 414600, 0x3423058) };
 		}
 
 		{
