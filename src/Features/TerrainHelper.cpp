@@ -132,24 +132,19 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 	auto& textures = thExtendedRendererState.PSTexture;
 
 	while (mask) {
-		unsigned long index;
-
-		_BitScanForward(&index, mask);
-
-		uint32_t batchStart = index;
-		uint32_t batchCount = 1;
-
-		uint32_t shiftedMask = mask >> (index + 1);
-		while ((shiftedMask & 1) != 0) {
-			++batchCount;
-			shiftedMask >>= 1;
-		}
+		// Find the position of the first set bit
+		uint32_t batchStart = std::countr_zero(mask);
+		
+		// Count consecutive 1s starting from batchStart
+		uint32_t shiftedMask = mask >> batchStart;
+		uint32_t batchCount = std::countr_one(shiftedMask);
 
 		a_context->PSSetShaderResources(
 			firstTexture + batchStart,
 			batchCount,
 			&textures[batchStart]);
 
+		// Clear the processed bits
 		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
 		mask &= ~clearMask;
 	}
