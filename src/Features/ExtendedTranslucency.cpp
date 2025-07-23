@@ -29,7 +29,8 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 	// Check alpha property exists and blending is enabled
 	if (alphaProperty && alphaProperty->GetAlphaBlending()) {
 		if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
-		i f (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
+			i f(data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get())
+			{
 				uint32_t material = static_cast<uint32_t>(static_cast<RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
 				if (material == MaterialModel::Disabled) {
 					// MaterialModel::Disabled (0) is the flag when this extra does not exist
