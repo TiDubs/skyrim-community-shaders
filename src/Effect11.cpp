@@ -16,7 +16,7 @@ void Effect11::Initialize()
 {
 	CreateRenderStates();
     CreateQuadGeometry();
- }
+}
 
 bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
  {
@@ -40,6 +40,8 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
         }
         return false;
     }
+
+	SetupCommonTextures();
 
     SetupCommonVariables();
 	SetupEffectVariables();
@@ -69,10 +71,10 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
     logger::debug("Executing technique sequence '{}' with {} techniques", baseTechniqueName, sequence.size());
 
     for (size_t i = 0; i < sequence.size(); ++i) {
-        auto& technique = sequence[i];
+        auto& techniqueInfo = sequence[i];
         
         // Skip null techniques (gaps in the sequence)
-        if (!technique) {
+        if (!techniqueInfo.technique) {
             continue;
         }
 
@@ -82,13 +84,15 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
 		context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 		context->OMSetDepthStencilState(nullptr, 0);
 
-		context->OMSetRenderTargets(1, &renderTarget, nullptr);
+        // Use technique-specific render target if specified, otherwise use fallback
+        auto techniqueRenderTarget = GetRenderTargetView(techniqueInfo.renderTargetName, renderTarget);
+		context->OMSetRenderTargets(1, &techniqueRenderTarget, nullptr);
 
         D3DX11_TECHNIQUE_DESC techDesc;
-		technique->GetDesc(&techDesc);
+		techniqueInfo.technique->GetDesc(&techDesc);
 
 		for (UINT p = 0; p < techDesc.Passes; p++) {
-			technique->GetPassByIndex(p)->Apply(0, context);
+			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);
 			
             UINT stride = sizeof(float) * 5;
 			UINT offset = 0;
@@ -148,6 +152,62 @@ void Effect11::CreateRenderStates()
     blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
     DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.GetAddressOf()));
+}
+
+void Effect11::SetupCommonTextures()
+{
+    auto device = globals::d3d::device;
+    auto state = globals::state;
+    
+    UINT screenWidth = static_cast<UINT>(state->screenSize.x);
+    UINT screenHeight = static_cast<UINT>(state->screenSize.y);
+    
+    D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = screenWidth;
+	texDesc.Height = screenHeight;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.CPUAccessFlags = 0;
+	texDesc.MiscFlags = 0;
+
+    {
+        Texture bloomTexture{};
+        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));     
+        commonTextureCache.insert({ "TextureBloom", bloomTexture });
+    }
+    
+    {
+        Texture lensTexture{};
+        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, lensTexture.texture.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateRenderTargetView(lensTexture.texture.Get(), nullptr, lensTexture.rtv.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateShaderResourceView(lensTexture.texture.Get(), nullptr, lensTexture.srv.GetAddressOf()));    
+        commonTextureCache.insert({ "TextureLens", lensTexture });
+    }
+    
+    {
+        Texture adaptationTexture{};
+        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateShaderResourceView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.srv.GetAddressOf()));    
+        commonTextureCache.insert({ "TextureAdaptation", adaptationTexture });
+    }
+    
+    {
+        Texture apertureTexture{};
+        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, apertureTexture.texture.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateRenderTargetView(apertureTexture.texture.Get(), nullptr, apertureTexture.rtv.GetAddressOf()));
+        DX::ThrowIfFailed(device->CreateShaderResourceView(apertureTexture.texture.Get(), nullptr, apertureTexture.srv.GetAddressOf()));	
+        commonTextureCache.insert({ "TextureAperture", apertureTexture });
+    }
+    
+    logger::info("Created standard textures: TextureBloom, TextureLens, TextureAdaptation, TextureAperture");
 }
 
 std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
@@ -333,8 +393,8 @@ ID3D11ShaderResourceView* Effect11::LoadTextureFromFile(const std::string& filen
 	auto device = globals::d3d::device;
 
     // Check cache first
-    auto cacheIt = textureCache.find(filename);
-    if (cacheIt != textureCache.end()) {
+    auto cacheIt = customTextureCache.find(filename);
+    if (cacheIt != customTextureCache.end()) {
         return cacheIt->second.Get();
     }
 
@@ -359,7 +419,7 @@ ID3D11ShaderResourceView* Effect11::LoadTextureFromFile(const std::string& filen
     }
 
     // Cache the loaded texture
-    textureCache[filename] = srv;
+    customTextureCache[filename] = srv;
     
     logger::info("Successfully loaded texture: {}", fileString);
     return srv.Get();
@@ -444,13 +504,16 @@ void Effect11::LoadTechniques()
             sequenceNumber = 0;
         }
 
+        // Get RenderTarget annotation
+        std::string renderTargetName = GetRenderTargetFromTechnique(technique);
+        
         // Ensure the technique sequence vector exists and is large enough
         if (techniques[baseName].size() <= sequenceNumber) {
             techniques[baseName].resize(sequenceNumber + 1);
         }
         
-        // Store the technique in the correct sequence position
-        techniques[baseName][sequenceNumber] = technique;
+        // Store the technique info in the correct sequence position
+        techniques[baseName][sequenceNumber] = { technique, renderTargetName };
         
         logger::debug("Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
     }
@@ -468,10 +531,66 @@ std::vector<std::string> Effect11::GetBaseTechniqueNames()
     
     for (const auto& [baseName, sequence] : techniques) {
         // Only include sequences that have at least the base technique (index 0)
-        if (!sequence.empty() && sequence[0]) {
+        if (!sequence.empty() && sequence[0].technique) {
             baseNames.push_back(baseName);
         }
     }
     
     return baseNames;
+}
+
+std::string Effect11::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
+{
+    if (!technique) {
+        return "";
+    }
+
+    // Get the technique's annotation count
+    D3DX11_TECHNIQUE_DESC techDesc;
+    if (FAILED(technique->GetDesc(&techDesc))) {
+        return "";
+    }
+
+    // Look for RenderTarget annotation
+    for (UINT i = 0; i < techDesc.Annotations; ++i) {
+        auto annotation = technique->GetAnnotationByIndex(i);
+        if (!annotation || !annotation->IsValid()) {
+            continue;
+        }
+
+        D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
+        if (FAILED(annotation->GetDesc(&annotationDesc))) {
+            continue;
+        }
+
+        // Check if this is the RenderTarget annotation
+        if (std::string(annotationDesc.Name) == "RenderTarget") {
+            // Get the string value
+            auto stringVar = annotation->AsString();
+            if (stringVar && stringVar->IsValid()) {
+                LPCSTR renderTargetName = nullptr;
+                if (SUCCEEDED(stringVar->GetString(&renderTargetName)) && renderTargetName) {
+                    return std::string(renderTargetName);
+                }
+            }
+        }
+    }
+
+    return "";
+}
+
+ID3D11RenderTargetView* Effect11::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
+{
+    if (renderTargetName.empty()) {
+        return fallback;
+    }
+
+    auto cacheIt = commonTextureCache.find(renderTargetName);
+	if (cacheIt != commonTextureCache.end()) {
+		return cacheIt->second.rtv.Get();
+    }
+
+    logger::critical("Render target '{}' not found in cache", renderTargetName);
+    
+    return nullptr;
 }

@@ -28,10 +28,24 @@ public:
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget);
 
 private:
+    struct TechniqueInfo {
+        ComPtr<ID3DX11EffectTechnique> technique;
+        std::string renderTargetName;
+    };
+
     ComPtr<ID3DX11Effect> effect;
-	std::unordered_map<std::string, std::vector<ComPtr<ID3DX11EffectTechnique>>> techniques;
+	std::unordered_map<std::string, std::vector<TechniqueInfo>> techniques;
 	std::unordered_map<std::string, ComPtr<ID3DX11EffectVariable>> variables;
-	std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> textureCache;
+	
+	struct Texture {
+		ComPtr<ID3D11Texture2D> texture;
+		ComPtr<ID3D11RenderTargetView> rtv;
+		ComPtr<ID3D11ShaderResourceView> srv;
+	};
+
+	std::unordered_map<std::string, Texture> commonTextureCache;
+	
+    std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
 
 	ComPtr<ID3DX11EffectVariable> Timer;
 	ComPtr<ID3DX11EffectVariable> ScreenSize;
@@ -52,6 +66,7 @@ private:
 
     void CreateQuadGeometry();
     void CreateRenderStates();
+    void SetupCommonTextures();
     std::vector<uint8_t> LoadFileToMemory(const std::string& filePath);
 
     void SetupCommonVariables();
@@ -66,4 +81,7 @@ private:
     
     void LoadTechniques();
     std::vector<std::string> GetBaseTechniqueNames();
+    
+    std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
+    ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 };
