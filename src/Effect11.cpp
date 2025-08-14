@@ -45,8 +45,9 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
 	SetupEffectVariables();
 
     LoadResourceNameTextures();
+    LoadTechniques();
 
-	logger::debug(std::format("Successfully loaded FX file: {}", a_filePath.string()));
+	logger::debug("Successfully loaded FX file: {}", a_filePath.string());
     return true;
 }
 
@@ -57,7 +58,26 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
     UpdateCommonVariables();
 	UpdateEffectVariables();
 
-    for (auto& technique : techniques[baseTechniqueName]){
+    // Check if the technique sequence exists
+    auto sequenceIt = techniques.find(baseTechniqueName);
+    if (sequenceIt == techniques.end()) {
+        logger::error("Technique sequence '{}' not found", baseTechniqueName);
+        return;
+    }
+
+    const auto& sequence = sequenceIt->second;
+    logger::debug("Executing technique sequence '{}' with {} techniques", baseTechniqueName, sequence.size());
+
+    for (size_t i = 0; i < sequence.size(); ++i) {
+        auto& technique = sequence[i];
+        
+        // Skip null techniques (gaps in the sequence)
+        if (!technique) {
+            continue;
+        }
+
+        logger::debug("Executing technique {} in sequence '{}'", i, baseTechniqueName);
+
 		context->RSSetState(rasterizerState.Get());
 		context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 		context->OMSetDepthStencilState(nullptr, 0);
@@ -176,8 +196,8 @@ void Effect11::UpdateCommonVariables()
     {
 		float aspect = state->screenSize.x / state->screenSize.y;
 
-		float4 screenSize = { state->screenSize.x, 1.0f / state->screenSize.x, aspect, 1.0f / aspect };
-		Timer->SetRawValue(&screenSize, 0, sizeof(screenSize));
+		float4 screenSize = { state->screenSize.x, state->screenSize.y, aspect, 1.0f / aspect };
+		ScreenSize->SetRawValue(&screenSize, 0, sizeof(screenSize));
 	}
 
 	auto sky = globals::game::sky;
@@ -279,7 +299,7 @@ void Effect11::UpdateEffectVariables()
 	Params01->SetRawValue(&params01, 0, sizeof(params01));
 
 	float4 enbParams01{};
-	Params01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
+	ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 }
 
 void Effect11::LoadResourceNameTextures()
@@ -331,15 +351,17 @@ ID3D11ShaderResourceView* Effect11::LoadTextureFromFile(const std::string& filen
 		hr = DirectX::CreateWICTextureFromFile(device, filepath.c_str(), texture.GetAddressOf(), srv.GetAddressOf());
     }
 
+    auto fileString = filepath.string();
+
     if (FAILED(hr)) {
-		logger::error(std::format("Failed to load texture file: {} (HRESULT: 0x{:08X})", filepath.string(), static_cast<uint32_t>(hr)));
+		logger::error("Failed to load texture file: {} (HRESULT: 0x{:08X})", fileString, static_cast<uint32_t>(hr));
         return nullptr;
     }
 
     // Cache the loaded texture
     textureCache[filename] = srv;
     
-    logger::info(std::format("Successfully loaded texture: {}", filepath.string()));
+    logger::info("Successfully loaded texture: {}", fileString);
     return srv.Get();
 }
 
@@ -381,4 +403,75 @@ std::string Effect11::GetResourceNameFromVariable(ID3DX11EffectVariable* variabl
     }
 
     return "";
+}
+
+void Effect11::LoadTechniques()
+{
+    D3DX11_EFFECT_DESC effectDesc;
+    DX::ThrowIfFailed(effect->GetDesc(&effectDesc));
+
+    // Load all techniques and organize them into sequences
+    for (UINT i = 0; i < effectDesc.Techniques; ++i) {
+        auto technique = effect->GetTechniqueByIndex(i);
+        if (!technique->IsValid()) {
+            continue;
+        }
+
+        D3DX11_TECHNIQUE_DESC techDesc;
+		DX::ThrowIfFailed(technique->GetDesc(&techDesc));
+
+        std::string techniqueName = techDesc.Name;
+        
+        // Determine the base technique name and sequence number
+        std::string baseName;
+        int sequenceNumber = 0;
+        
+        // Check if technique name ends with a number
+        size_t lastChar = techniqueName.length() - 1;
+        if (lastChar > 0 && std::isdigit(techniqueName[lastChar])) {
+            // Find where the number starts
+            size_t numberStart = lastChar;
+            while (numberStart > 0 && std::isdigit(techniqueName[numberStart - 1])) {
+                numberStart--;
+            }
+            
+            // Extract base name and sequence number
+            baseName = techniqueName.substr(0, numberStart);
+            sequenceNumber = std::stoi(techniqueName.substr(numberStart));
+        } else {
+            // This is a base technique
+            baseName = techniqueName;
+            sequenceNumber = 0;
+        }
+
+        // Ensure the technique sequence vector exists and is large enough
+        if (techniques[baseName].size() <= sequenceNumber) {
+            techniques[baseName].resize(sequenceNumber + 1);
+        }
+        
+        // Store the technique in the correct sequence position
+        techniques[baseName][sequenceNumber] = technique;
+        
+        logger::debug("Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
+    }
+
+    // Log the technique sequences found
+    for (const auto& [baseName, sequence] : techniques) {
+        logger::info("Technique sequence '{}' has {} techniques", baseName, sequence.size());
+    }
+}
+
+std::vector<std::string> Effect11::GetBaseTechniqueNames()
+{
+    std::vector<std::string> baseNames;
+    baseNames.reserve(techniques.size());
+    
+    for (const auto& [baseName, sequence] : techniques) {
+        // Only include sequences that have at least the base technique (index 0)
+        if (!sequence.empty() && sequence[0]) {
+            baseNames.push_back(baseName);
+        }
+    }
+    
+    return baseNames;
 }

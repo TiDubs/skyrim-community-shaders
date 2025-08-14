@@ -63,4 +63,7 @@ private:
     void LoadResourceNameTextures();
     ID3D11ShaderResourceView* LoadTextureFromFile(const std::string& filename);
     std::string GetResourceNameFromVariable(ID3DX11EffectVariable* variable);
+    
+    void LoadTechniques();
+    std::vector<std::string> GetBaseTechniqueNames();
 };
