@@ -883,9 +883,6 @@ void Effect11::RenderImGui()
                     
                     if (uiVar.type == UIVariableType::Float) {
                         if (ImGui::InputFloat(("##" + uiVar.name).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
-                            if (uiVar.floatMin != uiVar.floatMax) {
-                                uiVar.floatValue = std::clamp(uiVar.floatValue, uiVar.floatMin, uiVar.floatMax);
-                            }
                             valuesChanged = true;
                         }
                     } else if (uiVar.type == UIVariableType::Int) {
@@ -902,9 +899,6 @@ void Effect11::RenderImGui()
                             }
                         } else {
                             if (ImGui::InputInt(("##" + uiVar.name).c_str(), &uiVar.intValue)) {
-                                if (uiVar.intMin != uiVar.intMax) {
-                                    uiVar.intValue = std::clamp(uiVar.intValue, uiVar.intMin, uiVar.intMax);
-                                }
                                 valuesChanged = true;
                             }
                         }
