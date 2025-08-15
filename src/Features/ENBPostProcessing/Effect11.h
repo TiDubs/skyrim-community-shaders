@@ -27,9 +27,7 @@ public:
 
 	bool LoadFXFile(std::filesystem::path a_filePath);
 
-	void Execute(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output);
-
-    void ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget);
+	void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
     
     // UI System
     void RenderImGui();
@@ -119,8 +117,10 @@ private:
     ComPtr<ID3D11InputLayout> inputLayout;
     ComPtr<ID3D11RasterizerState> rasterizerState;
     ComPtr<ID3D11BlendState> blendState;
+	
+    void ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
 
-    void CreateQuadGeometry();
+	void CreateQuadGeometry();
     void CreateRenderStates();
     void SetupCommonTextures();
     std::vector<uint8_t> LoadFileToMemory(const std::string& filePath);
@@ -130,8 +130,10 @@ private:
 
 	void SetupEffectVariables();
 	void UpdateEffectVariables();
+	
+	void EnumerateAllVariables();
 
-    void LoadResourceNameTextures();
+    void SetupCustomTextures();
     ID3D11ShaderResourceView* LoadTextureFromFile(const std::string& filename);
     std::string GetResourceNameFromVariable(ID3DX11EffectVariable* variable);
     

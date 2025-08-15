@@ -46,8 +46,9 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
 
     SetupCommonVariables();
 	SetupEffectVariables();
+	EnumerateAllVariables();
 
-    LoadResourceNameTextures();
+    SetupCustomTextures();
     LoadTechniques();
 
     // Populate available techniques for UI selection
@@ -62,15 +63,13 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
     return true;
 }
 
-void Effect11::Execute(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output)
+void Effect11::Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
-	TextureColor->AsShaderResource()->SetResource(input);
-
-	ExecuteTechniqueSequence(selectedTechnique, output);
+	ExecuteTechniqueSequence(selectedTechnique, input, swap, output);
 }
 
 
-void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget)
+void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
 	auto context = globals::d3d::context;
 
@@ -86,6 +85,9 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
 
     const auto& sequence = sequenceIt->second;
     logger::debug("Executing technique sequence '{}' with {} techniques", baseTechniqueName, sequence.size());
+	
+    // Track which buffer contains the current result
+    bool currentIsInOutput = false;
 
     for (size_t i = 0; i < sequence.size(); ++i) {
         auto& techniqueInfo = sequence[i];
@@ -101,9 +103,30 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
 		context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 		context->OMSetDepthStencilState(nullptr, 0);
 
-        // Use technique-specific render target if specified, otherwise use fallback
-        auto techniqueRenderTarget = GetRenderTargetView(techniqueInfo.renderTargetName, renderTarget);
-		context->OMSetRenderTargets(1, &techniqueRenderTarget, nullptr);
+        // Determine input and output for this technique
+        ID3D11ShaderResourceView* inputSRV;
+        ID3D11RenderTargetView* outputRTV;
+        
+        if (i == 0) {
+            // First technique: read from input
+            inputSRV = input.SRV;
+            outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.RTV);
+            currentIsInOutput = true;
+        } else {
+            // Subsequent techniques: ping-pong between output and swap
+            if (currentIsInOutput) {
+                inputSRV = output.SRV;
+                outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, swap.RTV);
+                currentIsInOutput = false;
+            } else {
+                inputSRV = swap.SRV;
+                outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.RTV);
+                currentIsInOutput = true;
+            }
+        }
+
+        TextureColor->AsShaderResource()->SetResource(inputSRV);
+        context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
         D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
@@ -115,11 +138,17 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID
 			UINT offset = 0;
 			ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.Get() };
 			context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+			context->IASetInputLayout(inputLayout.Get());
 			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 			
             context->Draw(4, 0);
         }
 	}
+
+    // Ensure the final result is in the output buffer
+    if (!currentIsInOutput) {
+		context->CopyResource(output.texture, swap.texture);
+    }
 }
 
 void Effect11::CreateQuadGeometry()
@@ -146,6 +175,40 @@ void Effect11::CreateQuadGeometry()
     initData.pSysMem = vertices;
 
     DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.GetAddressOf()));
+
+    // Create input layout for ENB post-processing
+    D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+    };
+
+    // We need to get the vertex shader bytecode from the effect to create the input layout
+    // For now, we'll create a simple input layout that should work with most effects
+    ComPtr<ID3DBlob> vertexShaderBlob;
+    const char* vertexShaderSource = R"(
+        struct VS_INPUT_POST { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
+        struct VS_OUTPUT_POST { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
+        VS_OUTPUT_POST VS_Draw(VS_INPUT_POST IN) {
+            VS_OUTPUT_POST OUT;
+            OUT.pos = float4(IN.pos, 1.0);
+            OUT.txcoord0 = IN.txcoord;
+            return OUT;
+        }
+    )";
+
+    ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr, 
+                           "VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
+    
+    if (SUCCEEDED(hr)) {
+        hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
+                                                    vertexShaderBlob->GetBufferPointer(), 
+                                                    vertexShaderBlob->GetBufferSize(), 
+                                                    inputLayout.GetAddressOf());
+        if (FAILED(hr)) {
+            logger::error("Failed to create input layout for ENB quad");
+        }
+    }
 }
 
 void Effect11::CreateRenderStates()
@@ -376,14 +439,26 @@ void Effect11::SetupEffectVariables()
 
 void Effect11::UpdateEffectVariables()
 {
-	float4 params01[7]{};
+	float4 params01[7]{
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f, 1.0f}
+	};
+	
+    params01[4].w = 0.0f;
+	params01[5].w = 0.0f;
+
 	Params01->SetRawValue(&params01, 0, sizeof(params01));
 
 	float4 enbParams01{};
 	ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 }
 
-void Effect11::LoadResourceNameTextures()
+void Effect11::SetupCustomTextures()
 {
     // Iterate through all variables to find texture variables with ResourceName annotations
     for (auto& [varName, effectVar] : variables) {           
@@ -931,4 +1006,38 @@ void Effect11::RenderImGui()
 
 		ImGui::TreePop();
     }
+}
+
+void Effect11::EnumerateAllVariables()
+{
+    if (!effect) {
+        return;
+    }
+
+    D3DX11_EFFECT_DESC effectDesc;
+    if (FAILED(effect->GetDesc(&effectDesc))) {
+        return;
+    }
+
+    variables.clear();
+
+    // Iterate through all global variables in the effect
+    for (UINT i = 0; i < effectDesc.GlobalVariables; ++i) {
+        auto variable = effect->GetVariableByIndex(i);
+        if (!variable || !variable->IsValid()) {
+            continue;
+        }
+
+        D3DX11_EFFECT_VARIABLE_DESC varDesc;
+        if (FAILED(variable->GetDesc(&varDesc))) {
+            continue;
+        }
+
+        std::string varName = varDesc.Name;
+        variables[varName] = variable;
+        
+        logger::debug("Enumerated variable: {}", varName);
+    }
+
+    logger::info("Enumerated {} effect variables", variables.size());
 }

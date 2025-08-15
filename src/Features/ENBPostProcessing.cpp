@@ -46,9 +46,13 @@ struct Main_HDRTonemapBlendCinematic_Render
 		auto renderer = globals::game::renderer;	
 		
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-		
-		globals::features::enbPostProcessing.GetEffect11().Execute(main.SRV, framebuffer.RTV);
+
+		auto& imageSpaceTempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+		auto& imageSpaceTempCopy2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
+
+		globals::features::enbPostProcessing.GetEffect11().Execute(main, imageSpaceTempCopy, imageSpaceTempCopy2);
+
+		globals::d3d::context->CopyResource(imageSpaceTempCopy2.texture, imageSpaceTempCopy.texture);
 		//func(a1, a2, a3, a4, a5);
 	}
 
