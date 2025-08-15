@@ -822,12 +822,12 @@ void Effect11::UpdateUIVariables()
 
 void Effect11::RenderImGui()
 {
-    if (ImGui::TreeNodeEx("enbeffect.fx")) {
+	if (ImGui::TreeNodeEx("enbeffect.fx", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool valuesChanged = false;
 
         for (auto& uiVar : uiVariables) {
-            // Skip empty UI names (spacers)
-            if (uiVar.displayName.empty() || uiVar.displayName == " " || uiVar.displayName == "  ") {
+            // Skip empty UI names (spacers) - detect any string with only whitespace
+            if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
                 ImGui::Spacing();
                 continue;
             }
@@ -839,13 +839,9 @@ void Effect11::RenderImGui()
                     if (uiVar.floatMin == 0 && uiVar.floatMax == 0) {
                         ImGui::Text("%s", uiVar.displayName.c_str());
                     }
-                    else if (uiVar.widgetType == UIWidgetType::Slider) {
+					// Default
+                    else {
                         if (ImGui::SliderFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
-                            valuesChanged = true;
-                        }
-                    }
-                    else { // Spinner or default
-                        if (ImGui::DragFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatStep, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
                             valuesChanged = true;
                         }
                     }
@@ -854,9 +850,6 @@ void Effect11::RenderImGui()
                 case UIVariableType::Int:
                 {
                     if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
-                        // Ensure value is within bounds
-                        uiVar.intValue = std::clamp(uiVar.intValue, 0, static_cast<int>(uiVar.dropdownItems.size()) - 1);
-                        
                         const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
                         if (ImGui::BeginCombo(uiVar.displayName.c_str(), currentItem)) {
                             for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
@@ -876,13 +869,9 @@ void Effect11::RenderImGui()
                     else if (uiVar.intMin == 0 && uiVar.intMax == 0) {
                         ImGui::Text("%s", uiVar.displayName.c_str());
                     }
-                    else if (uiVar.widgetType == UIWidgetType::Slider) {
+                    // Default
+                    else {
                         if (ImGui::SliderInt(uiVar.displayName.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
-                            valuesChanged = true;
-                        }
-                    }
-                    else { // Spinner or default
-                        if (ImGui::DragInt(uiVar.displayName.c_str(), &uiVar.intValue, 1.0f, uiVar.intMin, uiVar.intMax)) {
                             valuesChanged = true;
                         }
                     }
