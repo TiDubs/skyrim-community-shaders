@@ -822,11 +822,7 @@ void Effect11::UpdateUIVariables()
 
 void Effect11::RenderImGui()
 {
-    if (uiVariables.empty()) {
-        return;
-    }
-
-    if (ImGui::Begin("enbeffect.fx")) {
+    if (ImGui::TreeNodeEx("enbeffect.fx")) {
         bool valuesChanged = false;
 
         for (auto& uiVar : uiVariables) {
@@ -839,9 +835,9 @@ void Effect11::RenderImGui()
             switch (uiVar.type) {
                 case UIVariableType::Float:
                 {
-                    // Check if min == max, making it read-only
-                    if (uiVar.floatMin == uiVar.floatMax) {
-                        ImGui::Text("%s: %.3f", uiVar.displayName.c_str(), uiVar.floatValue);
+                    // Detect labels
+                    if (uiVar.floatMin == 0 && uiVar.floatMax == 0) {
+                        ImGui::Text("%s", uiVar.displayName.c_str());
                     }
                     else if (uiVar.widgetType == UIWidgetType::Slider) {
                         if (ImGui::SliderFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
@@ -876,9 +872,9 @@ void Effect11::RenderImGui()
                             ImGui::EndCombo();
                         }
                     }
-                    // Check if min == max, making it read-only
-                    else if (uiVar.intMin == uiVar.intMax) {
-                        ImGui::Text("%s: %d", uiVar.displayName.c_str(), uiVar.intValue);
+                    // Detect labels
+                    else if (uiVar.intMin == 0 && uiVar.intMax == 0) {
+                        ImGui::Text("%s", uiVar.displayName.c_str());
                     }
                     else if (uiVar.widgetType == UIWidgetType::Slider) {
                         if (ImGui::SliderInt(uiVar.displayName.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
@@ -906,6 +902,7 @@ void Effect11::RenderImGui()
         if (valuesChanged) {
             UpdateUIVariables();
         }
+
+		ImGui::TreePop();
     }
-    ImGui::End();
 }
