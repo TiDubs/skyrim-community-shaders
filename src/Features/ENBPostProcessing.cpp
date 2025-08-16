@@ -1,5 +1,5 @@
-#include "PCH.h"
 #include "ENBPostProcessing.h"
+#include "PCH.h"
 #include "State.h"
 
 void ENBPostProcessing::SaveSettings(json& o_json)
@@ -12,7 +12,7 @@ void ENBPostProcessing::LoadSettings(json& o_json)
 {
 	if (o_json["Enabled"].is_boolean())
 		settings.Enabled = o_json["Enabled"];
-	
+
 	if (o_json["EffectPath"].is_string())
 		settings.EffectPath = o_json["EffectPath"];
 }
@@ -24,7 +24,7 @@ void ENBPostProcessing::RestoreDefaultSettings()
 }
 
 void ENBPostProcessing::DrawSettings()
-{	
+{
 	GetEffectManager().RenderImGui();
 }
 
@@ -40,10 +40,10 @@ void ENBPostProcessing::Reset()
 
 struct Main_HDRTonemapBlendCinematic_Render
 {
-	static void thunk(RE::ImageSpaceManager* , RE::ImageSpaceEffect* , uint32_t , uint32_t , RE::ImageSpaceShaderParam*)
+	static void thunk(RE::ImageSpaceManager*, RE::ImageSpaceEffect*, uint32_t, uint32_t, RE::ImageSpaceShaderParam*)
 	{
-		auto renderer = globals::game::renderer;	
-		
+		auto renderer = globals::game::renderer;
+
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 		auto& imageSpaceTempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];

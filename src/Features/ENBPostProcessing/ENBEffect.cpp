@@ -1,11 +1,11 @@
 #include "ENBEffect.h"
 
-void ENBEffect::Execute(RE::BSGraphics::RenderTargetData& input, 
-                       RE::BSGraphics::RenderTargetData& swap, 
-                       RE::BSGraphics::RenderTargetData& output)
+void ENBEffect::Execute(RE::BSGraphics::RenderTargetData& input,
+	RE::BSGraphics::RenderTargetData& swap,
+	RE::BSGraphics::RenderTargetData& output)
 {
-    UpdateEffectVariables();   
-    ExecuteTechniqueSequence(GetSelectedTechnique(), input, swap, output);
+	UpdateEffectVariables();
+	ExecuteTechniqueSequence(GetSelectedTechnique(), input, swap, output);
 }
 
 void ENBEffect::UpdateEffectVariables()
