@@ -34,8 +34,7 @@ This framework provides an extensible system for loading and executing ENBSeries
 ## Usage Example
 
 ```cpp
-// Initialize the effect system
-EffectRegistry::RegisterAllEffects();
+// Initialize the effect system (automatically registers all known effects)
 EffectManager::GetSingleton().Initialize();
 
 // Load specific effects
@@ -58,14 +57,45 @@ manager.ExecuteAllEffects(inputRT, swapRT, outputRT);
 class MyCustomEffect : public Effect11 {
 public:
     virtual std::string GetEffectType() const override { return "MyCustomEffect"; }
+    virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
     virtual void Execute(...) override { /* implementation */ }
-    virtual void SetupCustomVariables() override { /* setup */ }
 };
 ```
 
-2. Register the effect in EffectRegistry:
+2. Add the effect to RegisterAllKnownEffects() in EffectManager.cpp:
 ```cpp
-manager.RegisterEffect<MyCustomEffect>("MyCustomEffect");
+void EffectManager::RegisterAllKnownEffects()
+{
+    // Register ENBEffect
+    {
+        EffectEntry entry;
+        entry.effect = std::make_unique<ENBEffect>();
+        entry.type = entry.effect->GetEffectType();
+        entry.isLoaded = false;
+        entry.isEnabled = true;
+        effects["enbeffect"] = std::move(entry);
+    }
+    
+    // Register ENBBloom
+    {
+        EffectEntry entry;
+        entry.effect = std::make_unique<ENBBloom>();
+        entry.type = entry.effect->GetEffectType();
+        entry.isLoaded = false;
+        entry.isEnabled = true;
+        effects["enbbloom"] = std::move(entry);
+    }
+    
+    // Add your new effect here
+    {
+        EffectEntry entry;
+        entry.effect = std::make_unique<MyCustomEffect>();
+        entry.type = entry.effect->GetEffectType();
+        entry.isLoaded = false;
+        entry.isEnabled = true;
+        effects["mycustom"] = std::move(entry);
+    }
+}
 ```
 
 3. Load and use the effect:

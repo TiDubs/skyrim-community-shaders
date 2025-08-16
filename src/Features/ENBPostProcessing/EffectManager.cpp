@@ -1,4 +1,6 @@
 #include "EffectManager.h"
+#include "ENBEffect.h"
+#include "ENBBloom.h"
 #include "Globals.h"
 #include <functional>
 #include <d3dcompiler.h>
@@ -12,6 +14,7 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
+    RegisterAllKnownEffects();
     InitializeSharedResources();
 }
 
@@ -23,31 +26,29 @@ void EffectManager::Reset()
 
 bool EffectManager::LoadEffect(const std::string& name, const std::filesystem::path& filePath)
 {
-    auto factoryIt = factories.find(name);
-    if (factoryIt == factories.end()) {
+    auto effectIt = effects.find(name);
+    if (effectIt == effects.end()) {
+        logger::error("Effect '{}' not registered", name);
         return false;
     }
 
-    // Create new effect instance
-    auto effect = factoryIt->second();
-    if (!effect) {
+    auto& entry = effectIt->second;
+    if (!entry.effect) {
+        logger::error("Effect '{}' has no instance", name);
         return false;
     }
 
     // Initialize and load the effect
-    effect->Initialize();
-    if (!effect->LoadFXFile(filePath)) {
+    entry.effect->Initialize();
+    if (!entry.effect->LoadFXFile(filePath)) {
+        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), name);
         return false;
     }
 
-    // Store the effect
-    EffectEntry entry;
-    entry.effect = std::move(effect);
-    entry.type = entry.effect->GetEffectType();
     entry.isLoaded = true;
     entry.isEnabled = true;
-
-    effects[name] = std::move(entry);
+    
+    logger::info("Successfully loaded effect '{}' from '{}'", name, filePath.string());
     return true;
 }
 
@@ -487,4 +488,29 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
     if (eInteriorFactor && eInteriorFactor->IsValid()) {
         eInteriorFactor->SetRawValue(&commonData.eInteriorFactor, 0, sizeof(commonData.eInteriorFactor));
     }
+}
+
+void EffectManager::RegisterAllKnownEffects()
+{
+    // Register ENBEffect
+    {
+        EffectEntry entry;
+        entry.effect = std::make_unique<ENBEffect>();
+        entry.type = entry.effect->GetEffectType();
+        entry.isLoaded = false;
+        entry.isEnabled = true;
+        effects["enbeffect"] = std::move(entry);
+    }
+    
+    // Register ENBBloom
+    {
+        EffectEntry entry;
+        entry.effect = std::make_unique<ENBBloom>();
+        entry.type = entry.effect->GetEffectType();
+        entry.isLoaded = false;
+        entry.isEnabled = true;
+        effects["enbbloom"] = std::move(entry);
+    }
+    
+    logger::info("Registered {} effect types", effects.size());
 }

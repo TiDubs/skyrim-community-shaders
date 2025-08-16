@@ -19,8 +19,7 @@ public:
     static EffectManager& GetSingleton();
 
     // Effect registration and management
-    template<typename T>
-    void RegisterEffect(const std::string& name);
+    void RegisterAllKnownEffects();
     
     bool LoadEffect(const std::string& name, const std::filesystem::path& filePath);
     void UnloadEffect(const std::string& name);
@@ -61,10 +60,6 @@ public:
     };
 
     std::unordered_map<std::string, EffectEntry> effects;
-    
-    // Factory function type for creating effects
-    using EffectFactory = std::function<std::unique_ptr<Effect11>()>;
-    std::unordered_map<std::string, EffectFactory> factories;
 
     // Common resources shared across effects
     void InitializeSharedResources();
@@ -102,14 +97,3 @@ public:
     void SetupCommonTextures();
     void UpdateCommonData();
 };
-
-// Template implementation
-template<typename T>
-void EffectManager::RegisterEffect(const std::string& name)
-{
-    static_assert(std::is_base_of_v<Effect11, T>, "T must derive from Effect11");
-    
-    factories[name] = []() -> std::unique_ptr<Effect11> {
-        return std::make_unique<T>();
-    };
-}
