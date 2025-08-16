@@ -22,13 +22,10 @@ public:
     void RegisterEffects();
     
     bool LoadEffect(const std::string& name, const std::filesystem::path& filePath);
-    void UnloadEffect(const std::string& name);
     void UnloadAllEffects();
 
     // Effect execution
-    void ExecuteEffect(const std::string& name, RE::BSGraphics::RenderTargetData& input, 
-                      RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
-    void ExecuteAllEffects(RE::BSGraphics::RenderTargetData& input, 
+    void ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
                           RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
     
     // UI Integration
@@ -42,14 +39,7 @@ public:
     void UpdateAllCommonVariables();
     void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
-    struct EffectEntry {
-        std::unique_ptr<Effect> effect;
-        std::string type;
-        bool isLoaded = false;
-        bool isEnabled = true;
-    };
-
-    std::unordered_map<std::string, EffectEntry> effects;
+    std::unordered_map<std::string, std::unique_ptr<Effect>> effects;
 
     // Common resources shared across effects
     void InitializeSharedResources();

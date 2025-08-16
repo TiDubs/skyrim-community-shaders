@@ -26,35 +26,17 @@ void EffectManager::Reset()
 
 bool EffectManager::LoadEffect(const std::string& name, const std::filesystem::path& filePath)
 {
-    auto effectIt = effects.find(name);
-    if (effectIt == effects.end()) {
-        logger::error("Effect '{}' not registered", name);
-        return false;
-    }
+   auto& effect = effects[name];
 
-    auto& entry = effectIt->second;
-    if (!entry.effect) {
-        logger::error("Effect '{}' has no instance", name);
-        return false;
-    }
+   effect->Initialize();
 
-    // Initialize and load the effect
-    entry.effect->Initialize();
-    if (!entry.effect->LoadFXFile(filePath)) {
+    if (!effect->LoadFXFile(filePath)) {
         logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), name);
         return false;
     }
-
-    entry.isLoaded = true;
-    entry.isEnabled = true;
     
     logger::info("Successfully loaded effect '{}' from '{}'", name, filePath.string());
     return true;
-}
-
-void EffectManager::UnloadEffect(const std::string& name)
-{
-    effects.erase(name);
 }
 
 void EffectManager::UnloadAllEffects()
@@ -62,16 +44,7 @@ void EffectManager::UnloadAllEffects()
     effects.clear();
 }
 
-void EffectManager::ExecuteEffect(const std::string& name, RE::BSGraphics::RenderTargetData& input, 
-                                 RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
-{
-    auto it = effects.find(name);
-    if (it != effects.end() && it->second.isLoaded && it->second.isEnabled && it->second.effect) {
-        it->second.effect->Execute(input, swap, output);
-    }
-}
-
-void EffectManager::ExecuteAllEffects(RE::BSGraphics::RenderTargetData& input, 
+void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
                                      RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
 	auto context = globals::d3d::context;
@@ -87,33 +60,28 @@ void EffectManager::ExecuteAllEffects(RE::BSGraphics::RenderTargetData& input,
 	context->IASetInputLayout(sharedInputLayout.Get());
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    for (auto& [name, entry] : effects) {
-        if (entry.isLoaded && entry.isEnabled && entry.effect) {
-            entry.effect->Execute(input, swap, output);
-        }
+    for (auto& [name, effect] : effects) {
+        effect->Execute(input, swap, output);
     }
 }
 
 void EffectManager::RenderImGui()
 {
-    if (ImGui::CollapsingHeader("Effect Manager")) {
-        ImGui::Text("Loaded Effects: %zu", effects.size());
-        
-        for (auto& [name, entry] : effects) {
-            if (entry.isLoaded && entry.effect) {
-                ImGui::PushID(name.c_str());
-                
-                ImGui::Checkbox(("Enable##" + name).c_str(), &entry.isEnabled);
-                ImGui::SameLine();
-                ImGui::Text("%s (%s)", name.c_str(), entry.type.c_str());
-                
-                if (entry.isEnabled) {
-                    ImGui::Indent();
-                    entry.effect->RenderImGui();
-                    ImGui::Unindent();
-                }
-                
-                ImGui::PopID();
+    if (ImGui::CollapsingHeader("Effect Manager", ImGuiTreeNodeFlags_DefaultOpen)) {
+             
+        if (ImGui::Button("Apply")) {
+        }
+
+        if (ImGui::Button("Save")) {
+		}
+
+		if (ImGui::Button("Load")) {
+		}
+         
+        for (auto& [name, effect] : effects) {
+			if (ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				effect->RenderImGui();    
+                ImGui::TreePop();
             }
         }
     }
@@ -402,11 +370,8 @@ void EffectManager::UpdateAllCommonVariables()
 {
     UpdateCommonData();
     
-    for (auto& [name, entry] : effects) {
-        if (entry.isLoaded && entry.effect) {
-			auto effect = entry.effect->effect.Get();
-			UpdateCommonVariablesForEffect(effect);
-        }
+    for (auto& [name, effect] : effects) {
+    	UpdateCommonVariablesForEffect(effect->effect.Get());       
     }
 }
 
@@ -472,23 +437,8 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 
 void EffectManager::RegisterEffects()
 {
-    {
-        EffectEntry entry;
-        entry.effect = std::make_unique<ENBEffect>();
-        entry.type = entry.effect->GetEffectType();
-        entry.isLoaded = false;
-        entry.isEnabled = true;
-        effects["enbeffect"] = std::move(entry);
-    }
-    
-    {
-        EffectEntry entry;
-        entry.effect = std::make_unique<ENBBloom>();
-        entry.type = entry.effect->GetEffectType();
-        entry.isLoaded = false;
-        entry.isEnabled = true;
-        effects["enbbloom"] = std::move(entry);
-    }
+	effects["enbeffect.fx"] = std::unique_ptr<ENBEffect>();
+	effects["enbbloom.fx"] = std::unique_ptr<ENBBloom>();
     
     logger::info("Registered {} effect types", effects.size());
 }
