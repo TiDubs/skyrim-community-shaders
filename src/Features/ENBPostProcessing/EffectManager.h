@@ -29,7 +29,8 @@ public:
     void RenderImGui();
     
     // Lifecycle
-    void Initialize();
+	void Initialize();
+	void RegisterEffects();
     void Reset();
     
     // Common variable management

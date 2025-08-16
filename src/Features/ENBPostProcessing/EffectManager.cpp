@@ -14,14 +14,17 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-    // Create effect instances and use their names as keys
-    auto enbEffect = std::make_unique<ENBEffect>();
-    effects[enbEffect->GetName()] = std::move(enbEffect);
-    
-    auto enbBloom = std::make_unique<ENBBloom>();
-    effects[enbBloom->GetName()] = std::move(enbBloom);
-
     InitializeSharedResources();
+	RegisterEffects();
+}
+
+void EffectManager::RegisterEffects()
+{
+	auto enbEffect = std::make_unique<ENBEffect>();
+	effects[enbEffect->GetName()] = std::move(enbEffect);
+
+	auto enbBloom = std::make_unique<ENBBloom>();
+	effects[enbBloom->GetName()] = std::move(enbBloom);
 }
 
 void EffectManager::Reset()
@@ -44,6 +47,7 @@ bool EffectManager::LoadEffect(const std::string& name)
 void EffectManager::UnloadAllEffects()
 {
     effects.clear();
+	RegisterEffects();
 }
 
 void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
