@@ -25,13 +25,12 @@ void ENBPostProcessing::RestoreDefaultSettings()
 
 void ENBPostProcessing::DrawSettings()
 {	
-	effect11.RenderImGui();
+	GetEffectManager().RenderImGui();
 }
 
 void ENBPostProcessing::SetupResources()
 {
-	effect11.Initialize();
-	effect11.LoadFXFile("enbseries/enbeffect.fx");
+	GetEffectManager().Initialize();
 }
 
 void ENBPostProcessing::Reset()
@@ -50,7 +49,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 		auto& imageSpaceTempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 		auto& imageSpaceTempCopy2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
 
-		globals::features::enbPostProcessing.GetEffect11().Execute(main, imageSpaceTempCopy, imageSpaceTempCopy2);
+		globals::features::enbPostProcessing.GetEffectManager().ExecuteAllEffects(main, imageSpaceTempCopy, imageSpaceTempCopy2);
 
 		globals::d3d::context->CopyResource(imageSpaceTempCopy2.texture, imageSpaceTempCopy.texture);
 		//func(a1, a2, a3, a4, a5);

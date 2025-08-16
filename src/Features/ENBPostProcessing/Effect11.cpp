@@ -1,5 +1,6 @@
 ﻿#include "PCH.h"
 #include "Effect11.h"
+#include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
 
@@ -15,8 +16,8 @@
 
 void Effect11::Initialize()
 {
-	CreateRenderStates();
-    CreateQuadGeometry();
+    // Shared resources are now managed by EffectManager
+    // Individual effects can initialize their specific resources here
 }
 
 bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
@@ -42,10 +43,7 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
         return false;
     }
 
-	SetupCommonTextures();
-
-    SetupCommonVariables();
-	SetupEffectVariables();
+    // Common textures and variables are now managed by EffectManager
 	EnumerateAllVariables();
 
     SetupCustomTextures();
@@ -73,9 +71,6 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
 {
 	auto context = globals::d3d::context;
 
-    UpdateCommonVariables();
-	UpdateEffectVariables();
-
     // Check if the technique sequence exists
     auto sequenceIt = techniques.find(baseTechniqueName);
     if (sequenceIt == techniques.end()) {
@@ -88,6 +83,8 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
 	
     // Track which buffer contains the current result
     bool currentIsInOutput = false;
+    
+    auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
 
     for (size_t i = 0; i < sequence.size(); ++i) {
         auto& techniqueInfo = sequence[i];
@@ -98,10 +95,6 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
         }
 
         logger::debug("Executing technique {} in sequence '{}'", i, baseTechniqueName);
-
-		context->RSSetState(rasterizerState.Get());
-		context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
-		context->OMSetDepthStencilState(nullptr, 0);
 
         // Determine input and output for this technique
         ID3D11ShaderResourceView* inputSRV;
@@ -125,22 +118,14 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
             }
         }
 
-        TextureColor->AsShaderResource()->SetResource(inputSRV);
+        sourceTexture->AsShaderResource()->SetResource(inputSRV);
         context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
         D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
 
 		for (UINT p = 0; p < techDesc.Passes; p++) {
-			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);
-			
-            UINT stride = sizeof(float) * 5;
-			UINT offset = 0;
-			ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.Get() };
-			context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-			context->IASetInputLayout(inputLayout.Get());
-			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-			
+			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);	
             context->Draw(4, 0);
         }
 	}
@@ -151,150 +136,7 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
     }
 }
 
-void Effect11::CreateQuadGeometry()
-{
-    struct Vertex
-    {
-        float position[3];
-        float texCoord[2];
-    };
 
-    const Vertex vertices[] = {
-        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 1.0f } },
-        { { -1.0f,  1.0f, 0.0f }, { 0.0f, 0.0f } },
-        { {  1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f } },
-        { {  1.0f,  1.0f, 0.0f }, { 1.0f, 0.0f } }
-    };
-
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    bufferDesc.ByteWidth = sizeof(vertices);
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-
-    D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = vertices;
-
-    DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.GetAddressOf()));
-
-    // Create input layout for ENB post-processing
-    D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-    };
-
-    // We need to get the vertex shader bytecode from the effect to create the input layout
-    // For now, we'll create a simple input layout that should work with most effects
-    ComPtr<ID3DBlob> vertexShaderBlob;
-    const char* vertexShaderSource = R"(
-        struct VS_INPUT_POST { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
-        struct VS_OUTPUT_POST { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-        VS_OUTPUT_POST VS_Draw(VS_INPUT_POST IN) {
-            VS_OUTPUT_POST OUT;
-            OUT.pos = float4(IN.pos, 1.0);
-            OUT.txcoord0 = IN.txcoord;
-            return OUT;
-        }
-    )";
-
-    ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr, 
-                           "VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
-    
-    if (SUCCEEDED(hr)) {
-        hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
-                                                    vertexShaderBlob->GetBufferPointer(), 
-                                                    vertexShaderBlob->GetBufferSize(), 
-                                                    inputLayout.GetAddressOf());
-        if (FAILED(hr)) {
-            logger::error("Failed to create input layout for ENB quad");
-        }
-    }
-}
-
-void Effect11::CreateRenderStates()
-{
-    D3D11_RASTERIZER_DESC rastDesc = {};
-    rastDesc.CullMode = D3D11_CULL_NONE;
-    rastDesc.FillMode = D3D11_FILL_SOLID;
-    rastDesc.FrontCounterClockwise = FALSE;
-    rastDesc.DepthBias = 0;
-    rastDesc.DepthBiasClamp = 0.0f;
-    rastDesc.SlopeScaledDepthBias = 0.0f;
-    rastDesc.DepthClipEnable = TRUE;
-    rastDesc.ScissorEnable = FALSE;
-    rastDesc.MultisampleEnable = FALSE;
-    rastDesc.AntialiasedLineEnable = FALSE;
-
-    DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.GetAddressOf()));
-
-    D3D11_BLEND_DESC blendDesc = {};
-    blendDesc.RenderTarget[0].BlendEnable = FALSE;
-    blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-
-    DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.GetAddressOf()));
-}
-
-void Effect11::SetupCommonTextures()
-{
-    auto device = globals::d3d::device;
-    auto state = globals::state;
-    
-    UINT screenWidth = static_cast<UINT>(state->screenSize.x);
-    UINT screenHeight = static_cast<UINT>(state->screenSize.y);
-    
-    D3D11_TEXTURE2D_DESC texDesc = {};
-	texDesc.Width = screenWidth;
-	texDesc.Height = screenHeight;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	texDesc.CPUAccessFlags = 0;
-	texDesc.MiscFlags = 0;
-
-    {
-        Texture bloomTexture{};
-        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));     
-        commonTextureCache.insert({ "TextureBloom", bloomTexture });
-    }
-    
-    {
-        Texture lensTexture{};
-        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, lensTexture.texture.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateRenderTargetView(lensTexture.texture.Get(), nullptr, lensTexture.rtv.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateShaderResourceView(lensTexture.texture.Get(), nullptr, lensTexture.srv.GetAddressOf()));    
-        commonTextureCache.insert({ "TextureLens", lensTexture });
-    }
-    
-    {
-		texDesc.Width = 1;
-		texDesc.Height = 1;
-
-        Texture adaptationTexture{};
-        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateShaderResourceView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.srv.GetAddressOf()));    
-        commonTextureCache.insert({ "TextureAdaptation", adaptationTexture });
-    }
-    
-    {
-		texDesc.Width = 1;
-		texDesc.Height = 1;
-
-        Texture apertureTexture{};
-        DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, apertureTexture.texture.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateRenderTargetView(apertureTexture.texture.Get(), nullptr, apertureTexture.rtv.GetAddressOf()));
-        DX::ThrowIfFailed(device->CreateShaderResourceView(apertureTexture.texture.Get(), nullptr, apertureTexture.srv.GetAddressOf()));	
-        commonTextureCache.insert({ "TextureAperture", apertureTexture });
-    }
-    
-    logger::info("Created standard textures: TextureBloom, TextureLens, TextureAdaptation, TextureAperture");
-}
 
 std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
 {
@@ -313,164 +155,6 @@ std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
     file.read(reinterpret_cast<char*>(data.data()), size);
 
     return data;
-}
-
-void Effect11::SetupCommonVariables()
-{
-	TextureColor = effect->GetVariableByName("TextureColor")->AsShaderResource();
-	TextureBloom = effect->GetVariableByName("TextureBloom")->AsShaderResource();
-	TextureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
-	TextureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
-	TextureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
-
-	Timer = effect->GetVariableByName("Timer")->AsVector();
-	ScreenSize = effect->GetVariableByName("ScreenSize")->AsVector();
-	AdaptiveQuality = effect->GetVariableByName("AdaptiveQuality")->AsVector();
-	Weather = effect->GetVariableByName("Weather")->AsVector();
-	TimeOfDay1 = effect->GetVariableByName("TimeOfDay1")->AsVector();
-	TimeOfDay2 = effect->GetVariableByName("TimeOfDay2")->AsVector();
-	ENightDayFactor = effect->GetVariableByName("ENightDayFactor")->AsVector();
-	EInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
-
-	TextureBloom->AsShaderResource()->SetResource(commonTextureCache["TextureBloom"].srv.Get());
-	TextureLens->AsShaderResource()->SetResource(commonTextureCache["TextureLens"].srv.Get());
-	TextureAdaptation->AsShaderResource()->SetResource(commonTextureCache["TextureAdaptation"].srv.Get());
-	TextureAperture->AsShaderResource()->SetResource(commonTextureCache["TextureAperture"].srv.Get());
-}
-
-void Effect11::UpdateCommonVariables()
-{
-	auto state = globals::state;
-
-    {
-		auto modifiedTimer = (1000.0f * state->timer);
-		modifiedTimer = std::fmodf(modifiedTimer, 16777216);
-		modifiedTimer /= 16777216.0f;
-
-		float4 timer = { modifiedTimer, 60.0f, 0.0f, *globals::game::deltaTime };
-
-		Timer->SetRawValue(&timer, 0, sizeof(timer));
-	}
-	
-    {
-		float aspect = state->screenSize.x / state->screenSize.y;
-
-		float4 screenSize = { state->screenSize.x, state->screenSize.y, aspect, 1.0f / aspect };
-		ScreenSize->SetRawValue(&screenSize, 0, sizeof(screenSize));
-	}
-
-	auto sky = globals::game::sky;
-
-    {
-		float4 weather = { sky->currentWeather ? static_cast<float>(sky->currentWeather->formID) : 0, sky->lastWeather ? static_cast<float>(sky->lastWeather->formID) : 0, sky->currentWeatherPct, sky->currentGameHour };
-
-		Weather->SetRawValue(&weather, 0, sizeof(weather));
-	}
-
-	{
-		float currentTime = sky->currentGameHour;
-
-		float sunriseBegin = sky->GetSunriseBegin();
-		float sunriseEnd = sky->GetSunriseEnd();
-		float sunsetBegin = sky->GetSunsetBegin();
-		float sunsetEnd = sky->GetSunsetEnd();
-
-		float dawnMid = sunriseBegin + (sunriseEnd - sunriseBegin) * 0.5f;
-		float duskMid = sunsetBegin + (sunsetEnd - sunsetBegin) * 0.5f;
-
-		auto range01 = [](float t, float a, float b) {
-			// Handles wrap-around if b < a
-			float range = b - a;
-			if (range < 0.0f)
-				range += 24.0f;
-			float value = t - a;
-			if (value < 0.0f)
-				value += 24.0f;
-			return std::clamp(value / range, 0.0f, 1.0f);
-		};
-
-		float4 timeOfDay1 = { 0, 0, 0, 0 };  // dawn, sunrise, day, sunset
-		float4 timeOfDay2 = { 0, 0, 0, 0 };  // dusk, night
-
-		// Dawn → Sunrise
-		if (currentTime >= sunriseBegin && currentTime < dawnMid) {
-			float f = range01(currentTime, sunriseBegin, dawnMid);
-			timeOfDay1.x = 1.0f - f;  // dawn
-			timeOfDay1.y = f;         // sunrise
-		} else if (currentTime >= dawnMid && currentTime < sunriseEnd) {
-			float f = range01(currentTime, dawnMid, sunriseEnd);
-			timeOfDay1.y = 1.0f - f;  // sunrise
-			timeOfDay1.z = f;         // day
-		}
-		// Day → Sunset
-		else if (currentTime >= sunriseEnd && currentTime < sunsetBegin) {
-			float f = range01(currentTime, sunriseEnd, sunsetBegin);
-			timeOfDay1.z = 1.0f - f;  // day
-			timeOfDay1.w = f;         // sunset
-		}
-		// Sunset → Dusk
-		else if (currentTime >= sunsetBegin && currentTime < duskMid) {
-			float f = range01(currentTime, sunsetBegin, duskMid);
-			timeOfDay1.w = 1.0f - f;  // sunset
-			timeOfDay2.x = f;         // dusk
-		} else if (currentTime >= duskMid && currentTime < sunsetEnd) {
-			float f = range01(currentTime, duskMid, sunsetEnd);
-			timeOfDay2.x = 1.0f - f;  // dusk
-			timeOfDay2.y = f;         // night
-		}
-		// Night → Dawn (wrap)
-		else {
-			float f = range01(currentTime, sunsetEnd, sunriseBegin);
-			timeOfDay2.y = 1.0f - f;  // night
-			timeOfDay1.x = f;         // dawn
-		}
-
-		// Send to shaders
-		TimeOfDay1->SetRawValue(&timeOfDay1, 0, sizeof(timeOfDay1));
-		TimeOfDay2->SetRawValue(&timeOfDay2, 0, sizeof(timeOfDay2));
-	}
-
-    {
-		float eNightDayFactor = std::fabs(sky->currentGameHour - 12.0f);
-		if (eNightDayFactor > 12.0f)
-			eNightDayFactor = 24.0f - eNightDayFactor;
-		eNightDayFactor = 1.0f - eNightDayFactor / 12.0f;
-
-		ENightDayFactor->SetRawValue(&eNightDayFactor, 0, sizeof(eNightDayFactor));
-    }
-
-	{
-		float eInteriorFactor = sky->mode.any(RE::Sky::Mode::kInterior);
-
-		EInteriorFactor->SetRawValue(&eInteriorFactor, 0, sizeof(eInteriorFactor));
-	}
-}
-
-void Effect11::SetupEffectVariables()
-{
-	Params01 = effect->GetVariableByName("Params01")->AsVector();
-	ENBParams01 = effect->GetVariableByName("ENBParams01")->AsVector();
-}
-
-void Effect11::UpdateEffectVariables()
-{
-	float4 params01[7]{
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f},
-		{1.0f, 1.0f, 1.0f, 1.0f}
-	};
-	
-    params01[4].w = 0.0f;
-	params01[5].w = 0.0f;
-
-	Params01->SetRawValue(&params01, 0, sizeof(params01));
-
-	float4 enbParams01{};
-	ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 }
 
 void Effect11::SetupCustomTextures()
@@ -696,10 +380,10 @@ ID3D11RenderTargetView* Effect11::GetRenderTargetView(const std::string& renderT
         return fallback;
     }
 
-    auto cacheIt = commonTextureCache.find(renderTargetName);
-	if (cacheIt != commonTextureCache.end()) {
-		return cacheIt->second.rtv.Get();
-    }
+ //   auto cacheIt = commonTextureCache.find(renderTargetName);
+	//if (cacheIt != commonTextureCache.end()) {
+	//	return cacheIt->second.rtv.Get();
+ //   }
 
     logger::critical("Render target '{}' not found in cache", renderTargetName);
     

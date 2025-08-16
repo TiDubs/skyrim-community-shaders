@@ -7,27 +7,25 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <filesystem>
 #include <wrl/client.h>
+
+namespace RE {
+    namespace BSGraphics {
+        struct RenderTargetData;
+    }
+}
 
 using Microsoft::WRL::ComPtr;
 
-
-/**
- * @brief Framework for loading and executing ENBSeries-compatible FX effect files
- * 
- * This class provides a complete framework for loading DirectX 11 Effect (.fx) files
- * compatible with ENBSeries, executing them with proper render target handling,
- * and managing shader techniques and variables.
- */
 class Effect11
 {
 public:
-
 	void Initialize();
 
 	bool LoadFXFile(std::filesystem::path a_filePath);
 
-	void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
+	virtual void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output) = 0;
     
     // UI System
     void RenderImGui();
@@ -38,7 +36,10 @@ public:
     const std::string& GetSelectedTechnique() const { return selectedTechnique; }
     const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
 
-private:
+    // Pure virtual methods for derived classes to implement
+    virtual std::string GetEffectType() const = 0;
+    virtual LPCSTR GetSourceTexture() const = 0;
+
     struct TechniqueInfo {
         ComPtr<ID3DX11EffectTechnique> technique;
         std::string renderTargetName;
@@ -54,8 +55,6 @@ private:
 		ComPtr<ID3D11ShaderResourceView> srv;
 	};
 
-	std::unordered_map<std::string, Texture> commonTextureCache;
-	
     std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
 
     // UI Variable System
@@ -100,40 +99,12 @@ private:
     std::string selectedTechnique;
     std::vector<std::string> availableTechniques;
 	
-    ComPtr<ID3DX11EffectVariable> TextureColor;
-	ComPtr<ID3DX11EffectVariable> TextureBloom;
-	ComPtr<ID3DX11EffectVariable> TextureLens;
-	ComPtr<ID3DX11EffectVariable> TextureAdaptation;
-	ComPtr<ID3DX11EffectVariable> TextureAperture;
-	ComPtr<ID3DX11EffectVariable> Timer;
-	ComPtr<ID3DX11EffectVariable> ScreenSize;
-	ComPtr<ID3DX11EffectVariable> AdaptiveQuality;
-	ComPtr<ID3DX11EffectVariable> Weather;
-	ComPtr<ID3DX11EffectVariable> TimeOfDay1;
-	ComPtr<ID3DX11EffectVariable> TimeOfDay2;
-	ComPtr<ID3DX11EffectVariable> ENightDayFactor;
-	ComPtr<ID3DX11EffectVariable> EInteriorFactor;
-
-	ComPtr<ID3DX11EffectVariable> Params01;
-	ComPtr<ID3DX11EffectVariable> ENBParams01;
-    
-    ComPtr<ID3D11Buffer> quadVertexBuffer;
-    ComPtr<ID3D11InputLayout> inputLayout;
-    ComPtr<ID3D11RasterizerState> rasterizerState;
-    ComPtr<ID3D11BlendState> blendState;
-	
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
+    
+    // Allow EffectManager to setup common variables
+    ID3DX11Effect* GetEffect() const { return effect.Get(); }
 
-	void CreateQuadGeometry();
-    void CreateRenderStates();
-    void SetupCommonTextures();
     std::vector<uint8_t> LoadFileToMemory(const std::string& filePath);
-
-    void SetupCommonVariables();
-    void UpdateCommonVariables();
-
-	void SetupEffectVariables();
-	void UpdateEffectVariables();
 	
 	void EnumerateAllVariables();
 
