@@ -14,7 +14,7 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-    RegisterAllKnownEffects();
+    RegisterEffects();
     InitializeSharedResources();
 }
 
@@ -470,9 +470,8 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
     }
 }
 
-void EffectManager::RegisterAllKnownEffects()
+void EffectManager::RegisterEffects()
 {
-    // Register ENBEffect
     {
         EffectEntry entry;
         entry.effect = std::make_unique<ENBEffect>();
@@ -482,7 +481,6 @@ void EffectManager::RegisterAllKnownEffects()
         effects["enbeffect"] = std::move(entry);
     }
     
-    // Register ENBBloom
     {
         EffectEntry entry;
         entry.effect = std::make_unique<ENBBloom>();

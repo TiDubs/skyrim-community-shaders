@@ -19,7 +19,7 @@ public:
     static EffectManager& GetSingleton();
 
     // Effect registration and management
-    void RegisterAllKnownEffects();
+    void RegisterEffects();
     
     bool LoadEffect(const std::string& name, const std::filesystem::path& filePath);
     void UnloadEffect(const std::string& name);
