@@ -1,13 +1,10 @@
 #include "ENBDepthOfField.h"
+#include "EffectManager.h"
 #include "Globals.h"
 #include <imgui.h>
 
-void ENBDepthOfField::Execute(RE::BSGraphics::RenderTargetData& input,
-	RE::BSGraphics::RenderTargetData& swap,
-	RE::BSGraphics::RenderTargetData& output)
+void ENBDepthOfField::Execute()
 {
-	UpdateDepthOfFieldVariables();
-	ExecuteTechniqueSequence(GetSelectedTechnique(), input, swap, output);
 }
 
 void ENBDepthOfField::UpdateEffectVariables()

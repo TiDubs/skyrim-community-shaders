@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Downsampler.h"
-#include "Effect.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -12,7 +11,12 @@
 #include <vector>
 #include <wrl/client.h>
 
+#include <Features/ENBPostProcessing/Effect.h>
+
 using Microsoft::WRL::ComPtr;
+
+// Forward declarations
+class Effect;
 
 class EffectManager
 {
@@ -20,8 +24,9 @@ public:
 	static EffectManager& GetSingleton();
 
 	// Effect execution
-	void ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
-		RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
+	void ExecuteEffects();
+
+	Effect::Texture* GetCommonTexture(const std::string& name);
 
 	// UI Integration
 	void RenderImGui();
@@ -35,7 +40,6 @@ public:
 	void SaveEffects();
 
 	// Common variable management
-	void UpdateAllCommonVariables();
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
 	std::unordered_map<std::string, std::unique_ptr<Effect>> effects;
@@ -52,15 +56,7 @@ public:
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 
-	// Common textures and variables
-	struct Texture
-	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11RenderTargetView> rtv;
-		ComPtr<ID3D11ShaderResourceView> srv;
-	};
-
-	std::unordered_map<std::string, Texture> commonTextureCache;
+	std::unordered_map<std::string, Effect::Texture> commonTextureCache;
 
 	// Common variable data (updated once, applied to all effects)
 	struct CommonVariableData
@@ -80,7 +76,10 @@ public:
 	// Downsampling support
 	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
 	const Downsampler::DownsampleChain& GetSharedDownsampleChain() const { return sharedDownsampleChain; }
-	void PerformSharedDownsampling(RE::BSGraphics::RenderTargetData& input);
+
+	// Common texture access
+
+	const std::unordered_map<std::string, Effect::Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
 private:
 	Downsampler::DownsampleChain sharedDownsampleChain;

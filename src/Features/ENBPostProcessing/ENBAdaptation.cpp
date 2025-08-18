@@ -2,14 +2,29 @@
 #include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
-#include <imgui.h>
 
-void ENBAdaptation::Execute(RE::BSGraphics::RenderTargetData& input,
-	RE::BSGraphics::RenderTargetData& swap,
-	RE::BSGraphics::RenderTargetData& output)
+void ENBAdaptation::Execute()
 {
 	UpdateAdaptationVariables();
-	ExecuteTechniqueSequence(GetSelectedTechnique(), input, swap, output);
+
+	auto& effectManager = EffectManager::GetSingleton();
+
+	Texture inputTexture{};
+	auto& downsampler = effectManager.GetDownsampler();
+	auto& sharedChain = effectManager.GetSharedDownsampleChain();
+		
+	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, downsampler.FindBestMipLevel(sharedChain, 256, 256));
+	inputTexture.srv = ComPtr<ID3D11ShaderResourceView>(downsampledSRV);
+		
+	ExecuteTechnique("Downsample", inputTexture, adaptationTextures["TextureCurrent"]);
+	
+	auto* textureAdaptation = effectManager.GetCommonTexture("TextureAdaptation");
+	if (!textureAdaptation) {
+		logger::error("ENBAdaptation: TextureAdaptation not available");
+		return;
+	}
+	
+	ExecuteTechnique(GetSelectedTechnique(), adaptationTextures["TextureCurrent"], *textureAdaptation);
 }
 
 void ENBAdaptation::UpdateEffectVariables()
@@ -52,7 +67,7 @@ void ENBAdaptation::CreateAdaptationTextures()
 		texDesc.Width = 1;
 		texDesc.Height = 1;
 
-		AdaptationTexture texturePrevious{};
+		Texture texturePrevious{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texturePrevious.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(texturePrevious.texture.Get(), nullptr, texturePrevious.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(texturePrevious.texture.Get(), nullptr, texturePrevious.srv.GetAddressOf()));
@@ -65,7 +80,7 @@ void ENBAdaptation::CreateAdaptationTextures()
 		texDesc.Width = 16;
 		texDesc.Height = 16;
 
-		AdaptationTexture textureCurrent{};
+		Texture textureCurrent{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureCurrent.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureCurrent.texture.Get(), nullptr, textureCurrent.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureCurrent.texture.Get(), nullptr, textureCurrent.srv.GetAddressOf()));
@@ -78,7 +93,7 @@ void ENBAdaptation::CreateAdaptationTextures()
 		texDesc.Width = 1;
 		texDesc.Height = 1;
 
-		AdaptationTexture textureAdaptation{};
+		Texture textureAdaptation{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAdaptation.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.srv.GetAddressOf()));
@@ -106,10 +121,10 @@ void ENBAdaptation::UpdateAdaptationVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	
+
 	UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 16, 16);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, adaptationMipLevel);
-	
+
 	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 
 	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {

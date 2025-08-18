@@ -42,16 +42,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 {
 	static void thunk(RE::ImageSpaceManager*, RE::ImageSpaceEffect*, uint32_t, uint32_t, RE::ImageSpaceShaderParam*)
 	{
-		auto renderer = globals::game::renderer;
-
-		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-		auto& imageSpaceTempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-		auto& imageSpaceTempCopy2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
-
-		globals::features::enbPostProcessing.GetEffectManager().ExecuteEffects(main, imageSpaceTempCopy, imageSpaceTempCopy2);
-
-		globals::d3d::context->CopyResource(imageSpaceTempCopy2.texture, imageSpaceTempCopy.texture);
+		globals::features::enbPostProcessing.GetEffectManager().ExecuteEffects();
 		//func(a1, a2, a3, a4, a5);
 	}
 

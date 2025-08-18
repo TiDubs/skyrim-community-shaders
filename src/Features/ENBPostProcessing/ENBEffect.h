@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Effect.h"
+#include "EffectManager.h"
 
 class ENBEffect : public Effect
 {
@@ -9,9 +10,7 @@ public:
 
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
-	virtual void Execute(RE::BSGraphics::RenderTargetData& input,
-		RE::BSGraphics::RenderTargetData& swap,
-		RE::BSGraphics::RenderTargetData& output) override;
+	virtual void Execute() override;
 
 	void UpdateEffectVariables();
 };

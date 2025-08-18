@@ -13,11 +13,9 @@ class ENBAdaptation : public Effect
 public:
 	virtual std::string GetName() const override { return "enbadaptation.fx"; }
 
-	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
+	virtual LPCSTR GetSourceTexture() const override { return "TextureCurrent"; }
 
-	virtual void Execute(RE::BSGraphics::RenderTargetData& input,
-		RE::BSGraphics::RenderTargetData& swap,
-		RE::BSGraphics::RenderTargetData& output) override;
+	virtual void Execute() override;
 
 	void UpdateEffectVariables();
 
@@ -26,14 +24,8 @@ public:
 	void Unload() override;
 
 private:
-	struct AdaptationTexture
-	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11RenderTargetView> rtv;
-		ComPtr<ID3D11ShaderResourceView> srv;
-	};
 
-	std::unordered_map<std::string, AdaptationTexture> adaptationTextures;
+	std::unordered_map<std::string, Texture> adaptationTextures;
 
 	void CreateAdaptationTextures();
 	void UpdateAdaptationVariables();

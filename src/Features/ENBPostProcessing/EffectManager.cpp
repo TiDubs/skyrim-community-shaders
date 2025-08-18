@@ -1,9 +1,11 @@
 #include "EffectManager.h"
+#include "Effect.h"
 #include "ENBAdaptation.h"
 #include "ENBBloom.h"
 #include "ENBDepthOfField.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
+#include "ENBEffectPrePass.h"
 #include "ENBLens.h"
 #include "Globals.h"
 #include "State.h"
@@ -37,6 +39,7 @@ void EffectManager::RegisterEffects()
 	registerEffect(std::make_unique<ENBBloom>());
 	registerEffect(std::make_unique<ENBEffect>());
 	registerEffect(std::make_unique<ENBEffectPostPass>());
+	registerEffect(std::make_unique<ENBEffectPrePass>());
 }
 
 void EffectManager::ApplyEffects()
@@ -72,13 +75,17 @@ void EffectManager::SaveEffects()
 	logger::info("Saved effects");
 }
 
-void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
-	RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
+void EffectManager::ExecuteEffects()
 {
 	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+
+	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	UpdateCommonData();
 
 	// Perform shared downsampling once
-	PerformSharedDownsampling(input);
+	Downsampler::GetSingleton().Downsample(textureOriginal.SRV, sharedDownsampleChain);
 
 	context->RSSetState(rasterizerState.Get());
 	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
@@ -93,14 +100,20 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
-			effect->Execute(input, swap, output);
+			UpdateCommonVariablesForEffect(effect->GetEffect());
+			
+			effect->Execute();
 		}
 	}
 }
 
-void EffectManager::PerformSharedDownsampling(RE::BSGraphics::RenderTargetData& input)
+Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
 {
-	Downsampler::GetSingleton().Downsample(input.SRV, sharedDownsampleChain);
+	auto it = commonTextureCache.find(name);
+	if (it != commonTextureCache.end()) {
+		return &it->second;
+	}
+	return nullptr;
 }
 
 void EffectManager::RenderImGui()
@@ -279,7 +292,7 @@ void EffectManager::CreateCommonTextures()
 
 	// Create TextureBloom
 	{
-		Texture bloomTexture{};
+		Effect::Texture bloomTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
@@ -288,7 +301,7 @@ void EffectManager::CreateCommonTextures()
 
 	// Create TextureLens
 	{
-		Texture lensTexture{};
+		Effect::Texture lensTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, lensTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(lensTexture.texture.Get(), nullptr, lensTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(lensTexture.texture.Get(), nullptr, lensTexture.srv.GetAddressOf()));
@@ -299,7 +312,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC rgba32Desc = texDesc;
 		rgba32Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		Texture rgba32Texture{};
+		Effect::Texture rgba32Texture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&rgba32Desc, nullptr, rgba32Texture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.srv.GetAddressOf()));
@@ -310,7 +323,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC rgba64Desc = texDesc;
 		rgba64Desc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
-		Texture rgba64Texture{};
+		Effect::Texture rgba64Texture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64Desc, nullptr, rgba64Texture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.srv.GetAddressOf()));
@@ -321,7 +334,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC rgba64fDesc = texDesc;
 		rgba64fDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		Texture rgba64fTexture{};
+		Effect::Texture rgba64fTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64fDesc, nullptr, rgba64fTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.srv.GetAddressOf()));
@@ -332,7 +345,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC r16fDesc = texDesc;
 		r16fDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		Texture r16fTexture{};
+		Effect::Texture r16fTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&r16fDesc, nullptr, r16fTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(r16fTexture.texture.Get(), nullptr, r16fTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(r16fTexture.texture.Get(), nullptr, r16fTexture.srv.GetAddressOf()));
@@ -343,7 +356,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC r32fDesc = texDesc;
 		r32fDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		Texture r32fTexture{};
+		Effect::Texture r32fTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&r32fDesc, nullptr, r32fTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(r32fTexture.texture.Get(), nullptr, r32fTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(r32fTexture.texture.Get(), nullptr, r32fTexture.srv.GetAddressOf()));
@@ -354,7 +367,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC rgb32fDesc = texDesc;
 		rgb32fDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		Texture rgb32fTexture{};
+		Effect::Texture rgb32fTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&rgb32fDesc, nullptr, rgb32fTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.srv.GetAddressOf()));
@@ -367,7 +380,7 @@ void EffectManager::CreateCommonTextures()
 
 	// Create TextureAdaptation
 	{
-		Texture adaptationTexture{};
+		Effect::Texture adaptationTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.srv.GetAddressOf()));
@@ -376,7 +389,7 @@ void EffectManager::CreateCommonTextures()
 
 	// Create TextureAperture
 	{
-		Texture apertureTexture{};
+		Effect::Texture apertureTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, apertureTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(apertureTexture.texture.Get(), nullptr, apertureTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(apertureTexture.texture.Get(), nullptr, apertureTexture.srv.GetAddressOf()));
@@ -496,28 +509,22 @@ void EffectManager::UpdateCommonData()
 	}
 }
 
-void EffectManager::UpdateAllCommonVariables()
-{
-	UpdateCommonData();
-
-	for (auto& [name, effect] : effects) {
-		if (effect->IsCompiled()) {
-			UpdateCommonVariablesForEffect(effect->GetEffect());
-		}
-	}
-}
-
 void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 {
 	if (!effect)
 		return;
 
+	auto renderer = globals::game::renderer;
+
 	// Get variable pointers and set common textures
-	auto textureColor = effect->GetVariableByName("TextureColor")->AsShaderResource();
 	auto textureBloom = effect->GetVariableByName("TextureBloom")->AsShaderResource();
 	auto textureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
 	auto textureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
 	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
+	auto textureDepth = effect->GetVariableByName("TextureDepth")->AsShaderResource();
+	auto textureDownsampled = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
+	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
+
 	auto renderTargetRGBA32 = effect->GetVariableByName("RenderTargetRGBA32")->AsShaderResource();
 	auto renderTargetRGBA64 = effect->GetVariableByName("RenderTargetRGBA64")->AsShaderResource();
 	auto renderTargetRGBA64F = effect->GetVariableByName("RenderTargetRGBA64F")->AsShaderResource();
@@ -534,9 +541,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto eInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
 
 	// Set texture resources
-	if (textureColor && textureColor->IsValid()) {
-		textureColor->SetResource(commonTextureCache["TextureColor"].srv.Get());
-	}
 	if (textureBloom && textureBloom->IsValid()) {
 		textureBloom->SetResource(commonTextureCache["TextureBloom"].srv.Get());
 	}
@@ -549,6 +553,26 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	if (textureAperture && textureAperture->IsValid()) {
 		textureAperture->SetResource(commonTextureCache["TextureAperture"].srv.Get());
 	}
+	if (textureDepth && textureDepth->IsValid()) {
+		textureDepth->SetResource(renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
+	}
+
+	// Set downsampled texture for bloom (1024x1024 target)
+	if (textureDownsampled && textureDownsampled->IsValid()) {
+		auto& downsampler = Downsampler::GetSingleton();
+		UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedDownsampleChain, 1024, 1024);
+		auto downsampledSRV = downsampler.GetMipLevel(sharedDownsampleChain, bloomMipLevel);
+		if (downsampledSRV) {
+			textureDownsampled->SetResource(downsampledSRV);
+		}
+	}
+
+	// Set original texture (copy of main render target)
+	if (textureOriginal && textureOriginal->IsValid()) {
+		auto textureOriginalRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		textureOriginal->SetResource(textureOriginalRT.SRV);
+	}
+
 	if (renderTargetRGBA32 && renderTargetRGBA32->IsValid()) {
 		renderTargetRGBA32->SetResource(commonTextureCache["RenderTargetRGBA32"].srv.Get());
 	}

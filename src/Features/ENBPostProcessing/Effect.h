@@ -9,14 +9,8 @@
 #include <unordered_map>
 #include <vector>
 #include <wrl/client.h>
-
-namespace RE
-{
-	namespace BSGraphics
-	{
-		struct RenderTargetData;
-	}
-}
+// Forward declarations
+class EffectManager;
 
 using Microsoft::WRL::ComPtr;
 
@@ -37,7 +31,7 @@ public:
 	bool IsCompiled() const { return errors.empty(); }
 	const std::vector<std::string>& GetErrors() const { return errors; }
 
-	virtual void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output) = 0;
+	virtual void Execute() = 0;
 
 	// UI System
 	void RenderImGui();
@@ -61,6 +55,7 @@ public:
 	ComPtr<ID3DX11Effect> effect;
 	std::unordered_map<std::string, std::vector<TechniqueInfo>> techniques;
 	std::unordered_map<std::string, ComPtr<ID3DX11EffectVariable>> variables;
+
 
 	struct Texture
 	{
@@ -120,7 +115,12 @@ public:
 	// Error tracking
 	std::vector<std::string> errors;
 
-	void ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
+
+	// Execute a technique sequence with ping-pong rendering
+	void ExecuteTechniqueSequence(const std::string& baseTechniqueName, Texture& input, Texture& output, Texture& swap);
+	
+	// Execute a single technique
+	void ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output);
 
 	// Allow EffectManager to setup common variables
 	ID3DX11Effect* GetEffect() const { return effect.Get(); }

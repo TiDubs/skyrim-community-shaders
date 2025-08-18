@@ -4,12 +4,38 @@
 #include "State.h"
 #include <imgui.h>
 
-void ENBBloom::Execute(RE::BSGraphics::RenderTargetData& input,
-	RE::BSGraphics::RenderTargetData& swap,
-	RE::BSGraphics::RenderTargetData& output)
+void ENBBloom::Execute()
 {
+	// Get common textures for input/output
+	auto& effectManager = EffectManager::GetSingleton();
+
+	// Create input texture from downsampled input
+	Texture inputTexture{};
+	auto& downsampler = effectManager.GetDownsampler();
+	auto& sharedChain = effectManager.GetSharedDownsampleChain();
+	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
+	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
+
+	// Create temp input from downsampled
+	inputTexture.srv = ComPtr<ID3D11ShaderResourceView>(downsampledSRV);
+
+	auto renderer = globals::game::renderer;
+	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+
+	Effect::Texture swapTexture{};
+	swapTexture.texture = textureSwap.texture;
+	swapTexture.srv.Attach(textureSwap.SRV);
+	swapTexture.rtv.Attach(textureSwap.RTV);
+
 	UpdateBloomVariables();
-	ExecuteTechniqueSequence(GetSelectedTechnique(), input, swap, output);
+	
+	auto* textureBloom = effectManager.GetCommonTexture("TextureBloom");
+	if (!textureBloom) {
+		logger::error("ENBBloom: TextureBloom not available");
+		return;
+	}
+	
+	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureBloom, swapTexture);
 }
 
 void ENBBloom::UpdateEffectVariables()
@@ -86,11 +112,11 @@ void ENBBloom::UpdateBloomVariables()
 		}
 	}
 
-	// Set downsampled input texture for bloom (target around 64x64 for performance)
+	// Set downsampled input texture for bloom (target around 1024x1024 for performance)
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	
+
 	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
 

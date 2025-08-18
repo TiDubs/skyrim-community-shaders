@@ -106,7 +106,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
+void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, Texture& input, Texture& output, Texture& swap)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -145,18 +145,18 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::
 
 		if (i == 0) {
 			// First technique: read from input
-			inputSRV = input.SRV;
-			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.RTV);
+			inputSRV = input.srv.Get();
+			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.rtv.Get());
 			currentIsInOutput = true;
 		} else {
 			// Subsequent techniques: ping-pong between output and swap
 			if (currentIsInOutput) {
-				inputSRV = output.SRV;
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, swap.RTV);
+				inputSRV = output.srv.Get();
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, swap.rtv.Get());
 				currentIsInOutput = false;
 			} else {
-				inputSRV = swap.SRV;
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.RTV);
+				inputSRV = swap.srv.Get();
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.rtv.Get());
 				currentIsInOutput = true;
 			}
 		}
@@ -175,7 +175,43 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::
 
 	// Ensure the final result is in the output buffer
 	if (!currentIsInOutput) {
-		context->CopyResource(output.texture, swap.texture);
+		context->CopyResource(output.texture.Get(), swap.texture.Get());
+	}
+}
+
+void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output)
+{
+	if (!IsCompiled() || !effect) {
+		return;
+	}
+
+	auto context = globals::d3d::context;
+
+	// Find the technique
+	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
+	if (!technique || !technique->IsValid()) {
+		logger::error("Technique '{}' not found or invalid", techniqueName);
+		return;
+	}
+
+	logger::debug("Executing single technique '{}'", techniqueName);
+
+	// Set input texture
+	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
+	if (sourceTexture && sourceTexture->IsValid()) {
+		sourceTexture->SetResource(input.srv.Get());
+	}
+
+	// Set output render target
+	context->OMSetRenderTargets(1, output.rtv.GetAddressOf(), nullptr);
+
+	// Execute technique
+	D3DX11_TECHNIQUE_DESC techDesc;
+	technique->GetDesc(&techDesc);
+
+	for (UINT p = 0; p < techDesc.Passes; p++) {
+		technique->GetPassByIndex(p)->Apply(0, context);
+		context->Draw(4, 0);
 	}
 }
 
@@ -402,14 +438,15 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 		return fallback;
 	}
 
-	//   auto cacheIt = commonTextureCache.find(renderTargetName);
-	//if (cacheIt != commonTextureCache.end()) {
-	//	return cacheIt->second.rtv.Get();
-	//   }
+	// Get render target from EffectManager's common texture cache
+	auto& effectManager = EffectManager::GetSingleton();
+	auto* texture = effectManager.GetCommonTexture(renderTargetName);
+	if (texture && texture->rtv)
+		return texture->rtv.Get();
+	
 
-	logger::critical("Render target '{}' not found in cache", renderTargetName);
-
-	return nullptr;
+	logger::warn("Render target '{}' not found in cache, using fallback", renderTargetName);
+	return fallback;
 }
 
 void Effect::LoadUIVariables()
