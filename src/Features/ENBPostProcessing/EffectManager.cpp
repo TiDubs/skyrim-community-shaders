@@ -101,7 +101,7 @@ void EffectManager::ExecuteEffects()
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
 			UpdateCommonVariablesForEffect(effect->GetEffect());
-			effect->Execute();
+			//effect->Execute();
 		}
 	}
 }

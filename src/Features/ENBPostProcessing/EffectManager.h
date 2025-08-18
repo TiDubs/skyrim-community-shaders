@@ -42,7 +42,7 @@ public:
 	// Common variable management
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
-	std::unordered_map<std::string, std::unique_ptr<Effect>> effects;
+	std::vector<std::pair<std::string, std::unique_ptr<Effect>>> effects;
 
 	// Common resources shared across effects
 	void CreateCommonResources();
