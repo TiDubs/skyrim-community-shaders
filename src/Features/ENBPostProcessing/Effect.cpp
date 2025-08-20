@@ -54,8 +54,9 @@ void Effect::Unload()
 	customTextureCache.clear();
 	uiVariables.clear();
 	availableTechniques.clear();
-	selectedTechnique.clear();
 	effectTextureCache.clear();
+	uiTechniques.clear();
+	selectedTechniqueIndex = 0;
 
 	errors.clear();
 
@@ -95,11 +96,14 @@ bool Effect::LoadFXFile()
 
 	SetupCustomTextures();
 	LoadTechniques();
+	LoadUITechniques();
 
 	// Populate available techniques for UI selection
 	availableTechniques = GetBaseTechniqueNames();
-	if (!availableTechniques.empty()) {
-		selectedTechnique = availableTechniques[0];  // Default to first technique
+
+	// Set default selected technique to first annotated technique
+	if (!uiTechniques.empty()) {
+		selectedTechniqueIndex = 0;  // Default to first annotated technique
 	}
 
 	LoadUIVariables();
@@ -417,6 +421,45 @@ std::vector<std::string> Effect::GetBaseTechniqueNames()
 	return baseNames;
 }
 
+void Effect::LoadUITechniques()
+{
+	uiTechniques.clear();
+	selectedTechniqueIndex = 0;
+
+	D3DX11_EFFECT_DESC effectDesc;
+	if (FAILED(effect->GetDesc(&effectDesc))) {
+		return;
+	}
+
+	// Load all techniques that have UIName annotations
+	for (UINT i = 0; i < effectDesc.Techniques; ++i) {
+		auto technique = effect->GetTechniqueByIndex(i);
+		if (!technique->IsValid()) {
+			continue;
+		}
+
+		D3DX11_TECHNIQUE_DESC techDesc;
+		if (FAILED(technique->GetDesc(&techDesc))) {
+			continue;
+		}
+
+		std::string techniqueName = techDesc.Name;
+		std::string uiName = GetUINameFromTechnique(technique);
+
+		// Only include techniques with UIName annotations
+		if (!uiName.empty()) {
+			UITechnique uiTech;
+			uiTech.techniqueName = techniqueName;
+			uiTech.displayName = uiName;
+			uiTechniques.push_back(uiTech);
+
+			logger::debug("Added UI technique '{}' with display name '{}'", techniqueName, uiName);
+		}
+	}
+
+	logger::info("Loaded {} UI techniques", uiTechniques.size());
+}
+
 std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
 {
 	if (!technique) {
@@ -449,6 +492,46 @@ std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* techniq
 				LPCSTR renderTargetName = nullptr;
 				if (SUCCEEDED(stringVar->GetString(&renderTargetName)) && renderTargetName) {
 					return std::string(renderTargetName);
+				}
+			}
+		}
+	}
+
+	return "";
+}
+
+std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
+{
+	if (!technique) {
+		return "";
+	}
+
+	// Get the technique's annotation count
+	D3DX11_TECHNIQUE_DESC techDesc;
+	if (FAILED(technique->GetDesc(&techDesc))) {
+		return "";
+	}
+
+	// Look for UIName annotation
+	for (UINT i = 0; i < techDesc.Annotations; ++i) {
+		auto annotation = technique->GetAnnotationByIndex(i);
+		if (!annotation || !annotation->IsValid()) {
+			continue;
+		}
+
+		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
+		if (FAILED(annotation->GetDesc(&annotationDesc))) {
+			continue;
+		}
+
+		// Check if this is the UIName annotation
+		if (std::string(annotationDesc.Name) == "UIName") {
+			// Get the string value
+			auto stringVar = annotation->AsString();
+			if (stringVar && stringVar->IsValid()) {
+				LPCSTR uiName = nullptr;
+				if (SUCCEEDED(stringVar->GetString(&uiName)) && uiName) {
+					return std::string(uiName);
 				}
 			}
 		}
@@ -722,13 +805,16 @@ void Effect::RenderImGui()
 {
 	bool valuesChanged = false;
 
-	// Technique selection dropdown
-	if (!availableTechniques.empty()) {
-		if (ImGui::BeginCombo("Technique", selectedTechnique.c_str())) {
-			for (const auto& technique : availableTechniques) {
-				const bool isSelected = (selectedTechnique == technique);
-				if (ImGui::Selectable(technique.c_str(), isSelected)) {
-					selectedTechnique = technique;
+	// Technique selection dropdown using UI techniques with UIName annotations
+	if (!uiTechniques.empty()) {
+		const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
+		ImGui::Text("TECHNIQUE");
+		ImGui::SameLine();
+		if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
+			for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
+				const bool isSelected = (selectedTechniqueIndex == i);
+				if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
+					selectedTechniqueIndex = i;
 				}
 				if (isSelected) {
 					ImGui::SetItemDefaultFocus();
@@ -755,13 +841,13 @@ void Effect::RenderImGui()
 		if (!isLabelOnly) {
 			ImGui::SameLine();
 			if (uiVar.type == UIVariableType::Float) {
-				if (ImGui::InputFloat(uiVar.name.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
+				if (ImGui::InputFloat(("##" + uiVar.name).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
 					valuesChanged = true;
 				}
 			} else if (uiVar.type == UIVariableType::Int) {
 				if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
 					const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
-					if (ImGui::BeginCombo(uiVar.name.c_str(), currentItem)) {
+					if (ImGui::BeginCombo(("##" + uiVar.name).c_str(), currentItem)) {
 						for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
 							if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
 								uiVar.intValue = i;
@@ -771,12 +857,12 @@ void Effect::RenderImGui()
 						ImGui::EndCombo();
 					}
 				} else {
-					if (ImGui::InputInt(uiVar.name.c_str(), &uiVar.intValue)) {
+					if (ImGui::InputInt(("##" + uiVar.name).c_str(), &uiVar.intValue)) {
 						valuesChanged = true;
 					}
 				}
 			} else if (uiVar.type == UIVariableType::Bool) {
-				if (ImGui::Checkbox(uiVar.name.c_str(), &uiVar.boolValue)) {
+				if (ImGui::Checkbox(("##" + uiVar.name).c_str(), &uiVar.boolValue)) {
 					valuesChanged = true;
 				}
 			}
@@ -821,4 +907,27 @@ void Effect::EnumerateAllVariables()
 	}
 
 	logger::info("Enumerated {} effect variables", variables.size());
+}
+
+void Effect::SetSelectedTechniqueIndex(uint32_t index)
+{
+	if (index < uiTechniques.size()) {
+		selectedTechniqueIndex = index;
+	}
+}
+
+std::string Effect::GetSelectedTechnique() const
+{
+	if (selectedTechniqueIndex < uiTechniques.size()) {
+		return uiTechniques[selectedTechniqueIndex].techniqueName;
+	}
+	return "";
+}
+
+std::string Effect::GetTechniqueNameByIndex(uint32_t index) const
+{
+	if (index < uiTechniques.size()) {
+		return uiTechniques[index].techniqueName;
+	}
+	return "";
 }

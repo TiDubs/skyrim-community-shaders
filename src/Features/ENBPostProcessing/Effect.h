@@ -20,6 +20,12 @@ public:
 	Effect() = default;
 	virtual ~Effect() = default;
 
+	// UI technique structure (defined early for use in method declarations)
+	struct UITechnique {
+		std::string techniqueName;  // Actual technique name
+		std::string displayName;    // UIName annotation
+	};
+
 	// Settings methods
 	bool Load();
 	void Save();
@@ -38,9 +44,15 @@ public:
 	void LoadUIVariables();
 	void UpdateUIVariables();
 
-	// Technique selection
-	const std::string& GetSelectedTechnique() const { return selectedTechnique; }
+	// Technique selection (legacy)
+	std::string GetSelectedTechnique() const;
 	const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
+	
+	// UI technique selection (indexed access)
+	uint32_t GetSelectedTechniqueIndex() const { return selectedTechniqueIndex; }
+	void SetSelectedTechniqueIndex(uint32_t index);
+	const std::vector<UITechnique>& GetUITechniques() const { return uiTechniques; }
+	std::string GetTechniqueNameByIndex(uint32_t index) const;
 
 	// Pure virtual methods for derived classes to implement
 	virtual LPCSTR GetSourceTexture() const = 0;
@@ -108,9 +120,12 @@ public:
 
 	std::vector<UIVariable> uiVariables;
 
-	// Technique selection
-	std::string selectedTechnique;
+	// Technique selection (legacy)
 	std::vector<std::string> availableTechniques;
+	
+	// UI technique selection (indexed by uint, only includes annotated techniques)
+	std::vector<UITechnique> uiTechniques;
+	uint32_t selectedTechniqueIndex = 0;
 
 	// Error tracking
 	std::vector<std::string> errors;
@@ -137,6 +152,8 @@ private:
 	std::vector<std::string> GetBaseTechniqueNames();
 
 	std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
+	std::string GetUINameFromTechnique(ID3DX11EffectTechnique* technique);
+	void LoadUITechniques();
 	Effect::Texture* GetEffectTexture(const std::string& name);
 	ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 
