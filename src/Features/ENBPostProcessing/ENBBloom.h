@@ -16,11 +16,5 @@ public:
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
 	virtual void Execute() override;
-
-	// Override Apply to create bloom-specific textures
-	virtual bool Apply() override;
-	virtual void Unload() override;
-
-private:
-	void UpdateBloomVariables();
+	virtual void UpdateEffectVariables() override;
 };

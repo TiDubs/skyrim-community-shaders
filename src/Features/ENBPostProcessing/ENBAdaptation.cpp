@@ -2,11 +2,10 @@
 #include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
+#include "Utils/D3D.h"
 
 void ENBAdaptation::Execute()
 {
-	UpdateAdaptationVariables();
-
 	Texture nullInputTexture{};
 	nullInputTexture.texture = nullptr;
 	nullInputTexture.srv = nullptr;
@@ -22,34 +21,44 @@ void ENBAdaptation::Execute()
 		downsampledInput->SetResource(downsampler.GetMipLevel(sharedChain, adaptationMipLevel));
 	}
 
-	ExecuteTechnique("Downsample", nullInputTexture, adaptationTextures["TextureCurrent"]);
+	ExecuteTechnique("Downsample", nullInputTexture, effectTextureCache["TextureCurrent"]);
 
 	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (textureCurrent && textureCurrent->IsValid()) {
-		textureCurrent->SetResource(adaptationTextures["TextureCurrent"].srv.Get());
+		textureCurrent->SetResource(effectTextureCache["TextureCurrent"].srv.Get());
 	}
 
-	auto* textureAdaptation = effectManager.GetCommonTexture("TextureAdaptation");
-	if (!textureAdaptation) {
-		logger::error("ENBAdaptation: TextureAdaptation not available");
-		return;
-	}
+	// Use swap mechanism to determine input/output textures
+	const std::string texturePreviousName = (effectManager.textureSwap & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
+	const std::string textureAdaptationName = (effectManager.textureSwap & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
-	Texture tempTexture = *textureAdaptation;
-	*effectManager.GetCommonTexture("TextureAdaptation") = adaptationTextures["TexturePrevious"];
-	adaptationTextures["TexturePrevious"] = tempTexture;
-
+	// Set input texture (previous frame's adaptation value)
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(adaptationTextures["TexturePrevious"].srv.Get());
+		texturePrevious->SetResource(effectManager.GetCommonTexture(texturePreviousName)->srv.Get());	
 	}
 
-	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *effectManager.GetCommonTexture("TextureAdaptation"));
+	// Execute adaptation technique, writing to output texture
+	auto* textureAdaptation = effectManager.GetCommonTexture(textureAdaptationName);
+	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);;
 }
 
 void ENBAdaptation::UpdateEffectVariables()
 {
+	// Set adaptation textures
+	auto& effectManager = EffectManager::GetSingleton();
+
+	float4 adaptationParameters{};
+	adaptationParameters.x = effectManager.enbSettings.ADAPTATION.AdaptationMin;
+	adaptationParameters.y = effectManager.enbSettings.ADAPTATION.AdaptationMax;
+	adaptationParameters.z = effectManager.enbSettings.ADAPTATION.AdaptationSensitivity;
+	adaptationParameters.w = effectManager.enbSettings.ADAPTATION.AdaptationTime * (*globals::game::deltaTime);
+
+	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
+	if (AdaptationParameters && AdaptationParameters->IsValid())
+		AdaptationParameters->SetRawValue(&adaptationParameters, 0, sizeof(adaptationParameters));
 }
+
 
 bool ENBAdaptation::Apply()
 {
@@ -59,12 +68,6 @@ bool ENBAdaptation::Apply()
 		CreateAdaptationTextures();
 	}
 	return result;
-}
-
-void ENBAdaptation::Unload()
-{
-	adaptationTextures.clear();
-	Effect::Unload();
 }
 
 void ENBAdaptation::CreateAdaptationTextures()
@@ -82,17 +85,21 @@ void ENBAdaptation::CreateAdaptationTextures()
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
-	// Create TexturePrevious (1x1 R32F)
+	// Create TextureAdaptationSwap (1x1 R32F)
 	{
 		texDesc.Width = 1;
 		texDesc.Height = 1;
 
-		Texture texturePrevious{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texturePrevious.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(texturePrevious.texture.Get(), nullptr, texturePrevious.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(texturePrevious.texture.Get(), nullptr, texturePrevious.srv.GetAddressOf()));
+		Texture textureAdaptationSwap{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAdaptationSwap.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAdaptationSwap.texture.Get(), nullptr, textureAdaptationSwap.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAdaptationSwap.texture.Get(), nullptr, textureAdaptationSwap.srv.GetAddressOf()));
 
-		adaptationTextures["TexturePrevious"] = std::move(texturePrevious);
+		Util::SetResourceName(textureAdaptationSwap.texture.Get(), "ENBAdaptation::TextureAdaptationSwap");
+		Util::SetResourceName(textureAdaptationSwap.rtv.Get(), "ENBAdaptation::TextureAdaptationSwap RTV");
+		Util::SetResourceName(textureAdaptationSwap.srv.Get(), "ENBAdaptation::TextureAdaptationSwap SRV");
+
+		effectTextureCache["TextureAdaptationSwap"] = std::move(textureAdaptationSwap);
 	}
 
 	// Create TextureCurrent (16x16 R32F)
@@ -105,7 +112,11 @@ void ENBAdaptation::CreateAdaptationTextures()
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureCurrent.texture.Get(), nullptr, textureCurrent.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureCurrent.texture.Get(), nullptr, textureCurrent.srv.GetAddressOf()));
 
-		adaptationTextures["TextureCurrent"] = std::move(textureCurrent);
+		Util::SetResourceName(textureCurrent.texture.Get(), "ENBAdaptation::TextureCurrent");
+		Util::SetResourceName(textureCurrent.rtv.Get(), "ENBAdaptation::TextureCurrent RTV");
+		Util::SetResourceName(textureCurrent.srv.Get(), "ENBAdaptation::TextureCurrent SRV");
+
+		effectTextureCache["TextureCurrent"] = std::move(textureCurrent);
 	}
 
 	// Create TextureAdaptation (1x1 R32F)
@@ -118,34 +129,12 @@ void ENBAdaptation::CreateAdaptationTextures()
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.srv.GetAddressOf()));
 
-		adaptationTextures["TextureAdaptation"] = std::move(textureAdaptation);
+		Util::SetResourceName(textureAdaptation.texture.Get(), "ENBAdaptation::TextureAdaptation");
+		Util::SetResourceName(textureAdaptation.rtv.Get(), "ENBAdaptation::TextureAdaptation RTV");
+		Util::SetResourceName(textureAdaptation.srv.Get(), "ENBAdaptation::TextureAdaptation SRV");
+
+		effectTextureCache["TextureAdaptation"] = std::move(textureAdaptation);
 	}
 
-	logger::info("Created adaptation textures: TexturePrevious (1x1), TextureCurrent (16x16), TextureAdaptation (1x1)");
-}
-
-void ENBAdaptation::UpdateAdaptationVariables()
-{
-	if (!effect)
-		return;
-
-	// Set adaptation textures
-	for (auto& [name, adaptationTexture] : adaptationTextures) {
-		auto variable = effect->GetVariableByName(name.c_str())->AsShaderResource();
-		if (variable && variable->IsValid()) {
-			variable->SetResource(adaptationTexture.srv.Get());
-		}
-	}
-
-	auto& effectManager = EffectManager::GetSingleton();
-
-	float4 adaptationParameters{};
-	adaptationParameters.x = effectManager.enbSettings.ADAPTATION.AdaptationMin;
-	adaptationParameters.y = effectManager.enbSettings.ADAPTATION.AdaptationMax;
-	adaptationParameters.z = effectManager.enbSettings.ADAPTATION.AdaptationSensitivity;
-	adaptationParameters.w = effectManager.enbSettings.ADAPTATION.AdaptationTime * (*globals::game::deltaTime);
-
-	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
-	if (AdaptationParameters && AdaptationParameters->IsValid())
-		AdaptationParameters->SetRawValue(&adaptationParameters, 0, sizeof(adaptationParameters));
+	logger::info("Created adaptation textures: TextureAdaptationSwap (1x1), TextureCurrent (16x16), TextureAdaptation (1x1)");
 }

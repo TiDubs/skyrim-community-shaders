@@ -16,16 +16,11 @@ public:
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
 	virtual void Execute() override;
-
-	void UpdateEffectVariables();
+	virtual void UpdateEffectVariables() override;
 
 	// Override Apply to create adaptation-specific textures
 	bool Apply() override;
-	void Unload() override;
 
 private:
-	std::unordered_map<std::string, Texture> adaptationTextures;
-
 	void CreateAdaptationTextures();
-	void UpdateAdaptationVariables();
 };

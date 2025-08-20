@@ -15,8 +15,6 @@ void ENBEffect::Execute()
 	textureColor.srv = textureOriginal.SRV;
 	textureColor.rtv = textureOriginal.RTV;
 
-	UpdateEffectVariables();
-
 	globals::d3d::context->CopyResource(textureColorTemp->texture.Get(), textureOriginal.texture);
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, textureColor);
@@ -62,6 +60,8 @@ void ENBEffect::UpdateEffectVariables()
 
 	SetShaderResourceVariable("TextureBloom", effectManager.GetCommonTexture("TextureBloom")->srv.Get());
 	SetShaderResourceVariable("TextureLens", effectManager.GetCommonTexture("TextureLens")->srv.Get());
-	SetShaderResourceVariable("TextureAdaptation", effectManager.GetCommonTexture("TextureAdaptation")->srv.Get());
 	SetShaderResourceVariable("TextureAperture", effectManager.GetCommonTexture("TextureAperture")->srv.Get());
+	
+	const std::string textureAdaptationName = (effectManager.textureSwap & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	SetShaderResourceVariable("TextureAdaptation", effectManager.GetCommonTexture(textureAdaptationName)->srv.Get());
 }

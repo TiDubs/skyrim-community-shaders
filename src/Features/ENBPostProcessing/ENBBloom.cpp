@@ -9,31 +9,14 @@ void ENBBloom::Execute()
 	// Get common textures for input/output
 	auto& effectManager = EffectManager::GetSingleton();
 
-	UpdateBloomVariables();
-
 	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
 	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, *textureBloom);
 }
 
-bool ENBBloom::Apply()
+void ENBBloom::UpdateEffectVariables()
 {
-	// Call base Apply first
-	bool result = Effect::Apply();
-	return result;
-}
-
-void ENBBloom::Unload()
-{
-	Effect::Unload();
-}
-
-void ENBBloom::UpdateBloomVariables()
-{
-	if (!effect)
-		return;
-
 	// Set dowsampled texture, typically the one used
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();

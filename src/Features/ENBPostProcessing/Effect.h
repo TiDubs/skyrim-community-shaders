@@ -39,6 +39,7 @@ public:
 	const std::vector<std::string>& GetErrors() const { return errors; }
 
 	virtual void Execute() = 0;
+	virtual void UpdateEffectVariables() {}
 
 	// UI System
 	void RenderImGui();

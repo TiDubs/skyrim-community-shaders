@@ -12,5 +12,5 @@ public:
 
 	virtual void Execute() override;
 
-	void UpdateEffectVariables();
+	virtual void UpdateEffectVariables() override;
 };

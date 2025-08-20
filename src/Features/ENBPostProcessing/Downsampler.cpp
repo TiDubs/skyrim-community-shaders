@@ -1,5 +1,6 @@
 #include "Downsampler.h"
 #include "Globals.h"
+#include "Utils/D3D.h"
 #include <algorithm>
 #include <cmath>
 
@@ -62,6 +63,10 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 	srvDesc.Texture2D.MipLevels = 1;
 
 	DX::ThrowIfFailed(device->CreateShaderResourceView(chain.texture.Get(), &srvDesc, chain.srv.GetAddressOf()));
+
+	Util::SetResourceName(chain.texture.Get(), "Downsampler::DownsampleChain (%ux%u)", baseWidth, baseHeight);
+	Util::SetResourceName(chain.fullChainSRV.Get(), "Downsampler::DownsampleChain FullChain SRV (%ux%u)", baseWidth, baseHeight);
+	Util::SetResourceName(chain.srv.Get(), "Downsampler::DownsampleChain SRV (%ux%u) Mip%u", baseWidth, baseHeight, targetMipLevel);
 
 	// Store chain properties
 	chain.baseWidth = baseWidth;

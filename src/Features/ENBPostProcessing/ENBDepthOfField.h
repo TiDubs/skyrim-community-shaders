@@ -15,22 +15,11 @@ public:
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
 	virtual void Execute() override;
-
-	void UpdateEffectVariables();
+	virtual void UpdateEffectVariables() override;
 
 	// Override Apply to create depth of field-specific textures
 	virtual bool Apply() override;
-	virtual void Unload() override;
 
 private:
-	struct DepthOfFieldTexture
-	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11RenderTargetView> rtv;
-		ComPtr<ID3D11ShaderResourceView> srv;
-	};
-
-	std::unordered_map<std::string, DepthOfFieldTexture> dofTextures;
 	void CreateDepthOfFieldTextures();
-	void UpdateDepthOfFieldVariables();
 };

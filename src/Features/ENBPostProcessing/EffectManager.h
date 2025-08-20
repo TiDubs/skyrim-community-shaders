@@ -99,6 +99,9 @@ public:
 
 	Downsampler::DownsampleChain sharedDownsampleChain;
 
+	// Texture swap tracking
+	uint32_t textureSwap = 0;
+
 	// Time of day setting helper
 	struct TimeOfDaySettings
 	{

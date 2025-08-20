@@ -1,6 +1,7 @@
 #include "ENBDepthOfField.h"
 #include "EffectManager.h"
 #include "Globals.h"
+#include "Utils/D3D.h"
 #include <imgui.h>
 
 void ENBDepthOfField::Execute()
@@ -19,12 +20,6 @@ bool ENBDepthOfField::Apply()
 		CreateDepthOfFieldTextures();
 	}
 	return result;
-}
-
-void ENBDepthOfField::Unload()
-{
-	dofTextures.clear();
-	Effect::Unload();
 }
 
 void ENBDepthOfField::CreateDepthOfFieldTextures()
@@ -46,37 +41,32 @@ void ENBDepthOfField::CreateDepthOfFieldTextures()
 
 	// Create TextureFocus (1x1 R32F) - computed in PS_Focus
 	{
-		DepthOfFieldTexture textureFocus{};
+		Texture textureFocus{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureFocus.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureFocus.texture.Get(), nullptr, textureFocus.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureFocus.texture.Get(), nullptr, textureFocus.srv.GetAddressOf()));
 
-		dofTextures["TextureFocus"] = std::move(textureFocus);
+		Util::SetResourceName(textureFocus.texture.Get(), "ENBDepthOfField::TextureFocus");
+		Util::SetResourceName(textureFocus.rtv.Get(), "ENBDepthOfField::TextureFocus RTV");
+		Util::SetResourceName(textureFocus.srv.Get(), "ENBDepthOfField::TextureFocus SRV");
+
+		effectTextureCache["TextureFocus"] = std::move(textureFocus);
 	}
 
 	// Create TextureAperture (1x1 R32F) - computed in PS_Aperture
 	{
-		DepthOfFieldTexture textureAperture{};
+		Texture textureAperture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAperture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAperture.texture.Get(), nullptr, textureAperture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAperture.texture.Get(), nullptr, textureAperture.srv.GetAddressOf()));
 
-		dofTextures["TextureAperture"] = std::move(textureAperture);
+		Util::SetResourceName(textureAperture.texture.Get(), "ENBDepthOfField::TextureAperture");
+		Util::SetResourceName(textureAperture.rtv.Get(), "ENBDepthOfField::TextureAperture RTV");
+		Util::SetResourceName(textureAperture.srv.Get(), "ENBDepthOfField::TextureAperture SRV");
+
+		effectTextureCache["TextureAperture"] = std::move(textureAperture);
 	}
 
 	logger::info("Created depth of field textures: TextureFocus (1x1), TextureAperture (1x1)");
 }
 
-void ENBDepthOfField::UpdateDepthOfFieldVariables()
-{
-	if (!effect)
-		return;
-
-	// Set depth of field textures
-	for (auto& [name, dofTexture] : dofTextures) {
-		auto variable = effect->GetVariableByName(name.c_str())->AsShaderResource();
-		if (variable && variable->IsValid()) {
-			variable->SetResource(dofTexture.srv.Get());
-		}
-	}
-}
