@@ -397,7 +397,6 @@ void EffectManager::CreateColorCorrectionShader()
 		{
 			float Brightness;
 			float GammaCurve;
-			float2 padding;
 		};
 
 		RWTexture2D<float4> OutputTexture : register(u0);
@@ -406,13 +405,8 @@ void EffectManager::CreateColorCorrectionShader()
 		void main(uint3 id : SV_DispatchThreadID)
 		{
 			float4 color = OutputTexture[id.xy];
-			
-			// Apply brightness
-			color.rgb *= Brightness;
-			
-			// Apply gamma curve
-			color.rgb = pow(abs(color.rgb), 1.0 / GammaCurve);
-			
+			color.rgb = lerp(color.rgb * color.rgb, color.rgb, GammaCurve);
+			color.rgb *= Brightness;		
 			OutputTexture[id.xy] = color;
 		}
 	)";
