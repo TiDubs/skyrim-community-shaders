@@ -9,31 +9,12 @@ void ENBBloom::Execute()
 	// Get common textures for input/output
 	auto& effectManager = EffectManager::GetSingleton();
 
-	// Create input texture from downsampled input
-	Texture inputTexture{};
-	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
-
-	// Create temp input from downsampled
-	inputTexture.srv = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
-	
-	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	inputTexture.texture = textureOriginal.texture;
-	inputTexture.srv = textureOriginal.SRV;
-	inputTexture.rtv = textureOriginal.RTV;
-
 	UpdateBloomVariables();
 
+	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
 	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
-	auto textureHDR = effectManager.GetCommonTexture("TextureHDR");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureBloom, *textureHDR);
-}
-
-void ENBBloom::UpdateEffectVariables()
-{
+	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, *textureBloom);
 }
 
 bool ENBBloom::Apply()
@@ -105,16 +86,19 @@ void ENBBloom::UpdateBloomVariables()
 		}
 	}
 
-	// Set downsampled input texture for bloom (target around 1024x1024 for performance)
-	auto& effectManager = EffectManager::GetSingleton();
-	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-
-	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
-	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
-
+	// Set dowsampled texture, typically the one used
 	auto downsampledInput = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
-	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {
-		downsampledInput->SetResource(downsampledSRV);
+	if (downsampledInput && downsampledInput->IsValid()) {
+		auto& effectManager = EffectManager::GetSingleton();
+		auto& downsampler = effectManager.GetDownsampler();
+		auto& sharedChain = effectManager.GetSharedDownsampleChain();
+		UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
+		downsampledInput->SetResource(downsampler.GetMipLevel(sharedChain, bloomMipLevel));
+	}
+
+	// Set original texture, not typically used due to aliasing
+	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
+	if (textureOriginal && textureOriginal->IsValid()) {
+		textureOriginal->SetResource(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRV);
 	}
 }

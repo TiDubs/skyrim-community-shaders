@@ -291,13 +291,14 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
-	// Create TextureHDR
+
+	// Create TextureColorTemp
 	{
-		Effect::Texture hdrTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, hdrTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(hdrTexture.texture.Get(), nullptr, hdrTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(hdrTexture.texture.Get(), nullptr, hdrTexture.srv.GetAddressOf()));
-		commonTextureCache.insert({ "TextureHDR", hdrTexture });
+		Effect::Texture textureColor{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
+		commonTextureCache.insert({ "TextureColorTemp", textureColor });
 	}
 
 	// Create TextureLens
@@ -524,7 +525,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
 	auto textureDepth = effect->GetVariableByName("TextureDepth")->AsShaderResource();
 	auto textureDownsampled = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
-	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
 
 	auto renderTargetRGBA32 = effect->GetVariableByName("RenderTargetRGBA32")->AsShaderResource();
 	auto renderTargetRGBA64 = effect->GetVariableByName("RenderTargetRGBA64")->AsShaderResource();
@@ -554,24 +554,9 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	if (textureAperture && textureAperture->IsValid()) {
 		textureAperture->SetResource(commonTextureCache["TextureAperture"].srv.Get());
 	}
+
 	if (textureDepth && textureDepth->IsValid()) {
 		textureDepth->SetResource(renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
-	}
-
-	// Set downsampled texture for bloom (1024x1024 target)
-	if (textureDownsampled && textureDownsampled->IsValid()) {
-		auto& downsampler = Downsampler::GetSingleton();
-		UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedDownsampleChain, 1024, 1024);
-		auto downsampledSRV = downsampler.GetMipLevel(sharedDownsampleChain, bloomMipLevel);
-		if (downsampledSRV) {
-			textureDownsampled->SetResource(downsampledSRV);
-		}
-	}
-
-	// Set original texture (copy of main render target)
-	if (textureOriginal && textureOriginal->IsValid()) {
-		auto textureOriginalRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		textureOriginal->SetResource(textureOriginalRT.SRV);
 	}
 
 	if (renderTargetRGBA32 && renderTargetRGBA32->IsValid()) {

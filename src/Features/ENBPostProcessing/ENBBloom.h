@@ -13,11 +13,9 @@ class ENBBloom : public Effect
 public:
 	virtual std::string GetName() const override { return "enbbloom.fx"; }
 
-	virtual LPCSTR GetSourceTexture() const override { return "TextureDownsampled"; }
+	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
 	virtual void Execute() override;
-
-	void UpdateEffectVariables();
 
 	// Override Apply to create bloom-specific textures
 	virtual bool Apply() override;

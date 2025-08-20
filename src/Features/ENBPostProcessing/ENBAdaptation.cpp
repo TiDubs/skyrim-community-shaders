@@ -7,15 +7,22 @@ void ENBAdaptation::Execute()
 {
 	UpdateAdaptationVariables();
 
-	auto& effectManager = EffectManager::GetSingleton();
+	Texture nullInputTexture{};
+	nullInputTexture.texture = nullptr;
+	nullInputTexture.srv = nullptr;
+	nullInputTexture.rtv = nullptr;
 
-	Texture inputTexture{};
+	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
 
-	inputTexture.srv = downsampler.GetMipLevel(sharedChain, downsampler.FindBestMipLevel(sharedChain, 256, 256));
+	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
+	if (downsampledInput && downsampledInput->IsValid()) {
+		UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 256, 256);
+		downsampledInput->SetResource(downsampler.GetMipLevel(sharedChain, adaptationMipLevel));
+	}
 
-	ExecuteTechnique("Downsample", inputTexture, adaptationTextures["TextureCurrent"]);
+	ExecuteTechnique("Downsample", nullInputTexture, adaptationTextures["TextureCurrent"]);
 
 	auto* textureAdaptation = effectManager.GetCommonTexture("TextureAdaptation");
 	if (!textureAdaptation) {
@@ -23,7 +30,20 @@ void ENBAdaptation::Execute()
 		return;
 	}
 
-	ExecuteTechnique(GetSelectedTechnique(), adaptationTextures["TextureCurrent"], *textureAdaptation);
+	// Swap adaptation so current frame takes last frame as input
+	std::swap(*textureAdaptation, adaptationTextures["TexturePrevious"]);
+
+	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
+	if (textureCurrent && textureCurrent->IsValid()) {
+		textureCurrent->SetResource(adaptationTextures["TextureCurrent"].srv.Get());
+	}
+
+	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
+	if (texturePrevious && texturePrevious->IsValid()) {
+		texturePrevious->SetResource(adaptationTextures["TexturePrevious"].srv.Get());
+	}
+
+	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);
 }
 
 void ENBAdaptation::UpdateEffectVariables()
@@ -114,19 +134,5 @@ void ENBAdaptation::UpdateAdaptationVariables()
 		if (variable && variable->IsValid()) {
 			variable->SetResource(adaptationTexture.srv.Get());
 		}
-	}
-
-	// Set downsampled input texture for luminance calculation (target 1x1 for average luminance)
-	auto& effectManager = EffectManager::GetSingleton();
-	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-
-	UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 16, 16);
-	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, adaptationMipLevel);
-
-	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
-
-	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {
-		downsampledInput->SetResource(downsampledSRV);
 	}
 }

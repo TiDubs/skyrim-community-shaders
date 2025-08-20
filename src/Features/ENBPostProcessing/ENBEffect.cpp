@@ -4,37 +4,22 @@
 
 void ENBEffect::Execute()
 {
-	auto renderer = globals::game::renderer;
+	auto& effectManager = EffectManager::GetSingleton();
 
-	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	auto textureSwap2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
+	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
+	
+	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	Texture inputTexture{};
-	inputTexture.texture = textureOriginal.texture;
-	inputTexture.srv = textureOriginal.SRV;
-	inputTexture.rtv = textureOriginal.RTV;
-
-	Texture outputTexture{};
-	outputTexture.texture = textureSwap.texture;
-	outputTexture.srv = textureSwap.SRV;
-	outputTexture.rtv = textureSwap.RTV;
-
-	Texture swapTexture{};
-	swapTexture.texture = textureSwap2.texture;
-	swapTexture.srv = textureSwap2.SRV;
-	swapTexture.rtv = textureSwap2.RTV;
+	Texture textureColor{};
+	textureColor.texture = textureOriginal.texture;
+	textureColor.srv = textureOriginal.SRV;
+	textureColor.rtv = textureOriginal.RTV;
 
 	UpdateEffectVariables();
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, outputTexture, swapTexture);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), textureColor, *textureColorTemp);
 
-	auto framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-
-	ID3D11Resource* framebufferResource;
-	framebuffer.RTV->GetResource(&framebufferResource);
-
-	globals::d3d::context->CopyResource(framebufferResource, outputTexture.texture.Get());
+	// TODO: Need to copy to framebuffer
 }
 
 void ENBEffect::UpdateEffectVariables()

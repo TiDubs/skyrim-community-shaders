@@ -116,7 +116,7 @@ public:
 	std::vector<std::string> errors;
 
 	// Execute a technique sequence with ping-pong rendering
-	void ExecuteTechniqueSequence(const std::string& baseTechniqueName, Texture& input, Texture& output, Texture& swap);
+	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_swap, Texture& a_output);
 
 	// Execute a single technique
 	void ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output);

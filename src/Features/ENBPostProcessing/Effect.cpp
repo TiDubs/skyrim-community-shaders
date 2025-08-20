@@ -108,7 +108,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, Texture& input, Texture& output, Texture& swap)
+void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -117,50 +117,50 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, Text
 	auto context = globals::d3d::context;
 
 	// Check if the technique sequence exists
-	auto sequenceIt = techniques.find(baseTechniqueName);
+	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
-		logger::error("Technique sequence '{}' not found", baseTechniqueName);
+		logger::error("Technique sequence '{}' not found", a_baseTechniqueName);
 		return;
 	}
 
 	const auto& sequence = sequenceIt->second;
-	logger::debug("Executing technique sequence '{}' with {} techniques", baseTechniqueName, sequence.size());
-
-	// Track which buffer contains the current result
-	bool currentIsInOutput = false;
+	
+	logger::debug("Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
 	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
+
+	// Compute number of required swaps to execute effect
+	uint swaps = 0;
+	for (size_t i = 0; i < sequence.size(); ++i)
+		swaps += sequence[i].renderTargetName.empty();
+
+	bool swapOutput = swaps % 2;
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
 
-		// Skip null techniques (gaps in the sequence)
-		if (!techniqueInfo.technique) {
-			continue;
-		}
-
-		logger::debug("Executing technique {} in sequence '{}'", i, baseTechniqueName);
+		logger::debug("Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
 
 		// Determine input and output for this technique
 		ID3D11ShaderResourceView* inputSRV;
 		ID3D11RenderTargetView* outputRTV;
 
-		if (i == 0) {
-			// First technique: read from input
-			inputSRV = input.srv.Get();
-			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.rtv.Get());
-			currentIsInOutput = true;
+		if (swapOutput) {
+			inputSRV = a_output.srv.Get();
 		} else {
-			// Subsequent techniques: ping-pong between output and swap
-			if (currentIsInOutput) {
-				inputSRV = output.srv.Get();
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, swap.rtv.Get());
-				currentIsInOutput = false;
+			inputSRV = a_input.srv.Get();
+		}
+
+		if (!techniqueInfo.renderTargetName.empty()){
+			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
+		} else {
+			if (swapOutput) {
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
 			} else {
-				inputSRV = swap.srv.Get();
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, output.rtv.Get());
-				currentIsInOutput = true;
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
 			}
+			// Swap if rendered to other texture
+			swapOutput = !swapOutput;
 		}
 
 		sourceTexture->AsShaderResource()->SetResource(inputSRV);
@@ -191,11 +191,6 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, Text
 			context->Draw(4, 0);
 		}
 	}
-
-	// Ensure the final result is in the output buffer
-	if (!currentIsInOutput) {
-		context->CopyResource(output.texture.Get(), swap.texture.Get());
-	}
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output)
@@ -223,6 +218,19 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, 
 
 	// Set output render target
 	context->OMSetRenderTargets(1, output.rtv.GetAddressOf(), nullptr);
+
+	// Set viewport based on render target description
+	D3D11_TEXTURE2D_DESC texDesc;
+	output.texture->GetDesc(&texDesc);
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = static_cast<float>(texDesc.Width);
+	viewport.Height = static_cast<float>(texDesc.Height);
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
 
 	// Execute technique
 	D3DX11_TECHNIQUE_DESC techDesc;
