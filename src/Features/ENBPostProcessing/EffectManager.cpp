@@ -162,13 +162,12 @@ void EffectManager::RenderImGui()
 	if (ImGui::BeginTable("EffectManagerTable", 2, ImGuiTableFlags_Resizable)) {
 		ImGui::TableSetupColumn("ENB Settings", ImGuiTableColumnFlags_WidthFixed, 400.0f);
 		ImGui::TableSetupColumn("Effects", ImGuiTableColumnFlags_WidthStretch);
-			
+
 		ImGui::TableNextRow();
-			
+
 		// Left Side - ENB Settings
 		ImGui::TableSetColumnIndex(0);
 		if (ImGui::BeginChild("ENBSettings", ImVec2(0, 0), false)) {
-
 			if (ImGui::Button("Apply")) {
 				ApplyEffects();
 			}
@@ -243,7 +242,7 @@ void EffectManager::RenderImGui()
 			}
 		}
 		ImGui::EndChild();
-			
+
 		ImGui::EndTable();
 	}
 }
@@ -931,7 +930,7 @@ void EffectManager::SaveENBSettings()
 void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings)
 {
 	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-	
+
 	for (const auto& timeOfDay : timeOfDayNames) {
 		std::string label = prefix + timeOfDay;
 		ImGui::DragFloat(label.c_str(), &settings[timeOfDay]);
