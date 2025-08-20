@@ -4,6 +4,7 @@
 #include "PCH.h"
 #include "State.h"
 
+#include <algorithm>
 #include <chrono>
 #include <d3dcompiler.h>
 #include <filesystem>
@@ -16,12 +17,77 @@
 bool Effect::Load()
 {
 	logger::debug("Loading settings for effect '{}'", GetName());
+	
+	// Create ini file path based on effect name
+	std::filesystem::path iniPath = "enbseries";
+	iniPath /= GetName() + ".ini";
+	
+	// Check if file exists
+	if (!std::filesystem::exists(iniPath)) {
+		logger::debug("Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
+		return true; // Not an error, just use defaults
+	}
+
+	// Prepare section name
+	std::string section = GetName();
+	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
+		
+	for (auto& uiVar : uiVariables) {			
+		std::vector<char> valueBuffer(1024);	
+		DWORD result = GetPrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
+		if (result > 0) {
+			std::string value(valueBuffer.data());
+			LoadVariableFromString(uiVar, value);
+		}	
+	}
+	
+	selectedTechniqueIndex = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex, iniPath.string().c_str()));
+	selectedTechniqueIndex--; // 1-indexed inis
+
+	logger::info("Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
 }
 
 void Effect::Save()
 {
 	logger::debug("Saving settings for effect '{}'", GetName());
+	
+	// Create ini file path based on effect name
+	std::filesystem::path iniPath = "enbseries";
+	iniPath /= GetName() + ".ini";
+	
+	// Prepare section name
+	std::string section = GetName();
+	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
+	
+	for (const auto& uiVar : uiVariables) {
+		std::string value;
+		
+		switch (uiVar.type) {
+		case UIVariableType::Float:
+			value = std::to_string(uiVar.floatValue);
+			break;
+		case UIVariableType::Int:
+			value = std::to_string(uiVar.intValue);
+			break;
+		case UIVariableType::Bool:
+			value = uiVar.boolValue ? "true" : "false";
+			break;
+		}
+		
+		BOOL result = WritePrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), value.c_str(), iniPath.string().c_str());
+		if (!result) {
+			logger::warn("Failed to write key '{}' to ini file '{}'", uiVar.displayName, iniPath.string());
+		}
+	}
+	
+	std::string techniqueValue = std::to_string(selectedTechniqueIndex + 1);  // 1-indexed inis
+	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
+	if (!techniqueResult) {
+		logger::warn("Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
+	}
+	
+	logger::info("Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 }
 
 bool Effect::Apply()
@@ -30,15 +96,15 @@ bool Effect::Apply()
 
 	Unload();
 
-	if (!Load()) {
-		errors.push_back("Failed to load settings");
-		logger::error("Failed to load settings for effect '{}'", GetName());
-		return false;
-	}
-
 	if (!LoadFXFile()) {
 		errors.push_back("Failed to compile FX file");
 		logger::error("Failed to compile FX file for effect '{}'", GetName());
+		return false;
+	}
+
+	if (!Load()) {
+		errors.push_back("Failed to load settings");
+		logger::error("Failed to load settings for effect '{}'", GetName());
 		return false;
 	}
 
@@ -784,6 +850,35 @@ void Effect::LoadUIVariableValue(UIVariable& uiVar)
 	}
 }
 
+void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
+{
+	try {
+		switch (uiVar.type) {
+		case UIVariableType::Float:
+			uiVar.floatValue = std::stof(value);
+			break;
+		case UIVariableType::Int:
+			uiVar.intValue = std::stoi(value);
+			break;
+		case UIVariableType::Bool:
+			// Handle various boolean representations
+			std::string lowerValue = value;
+			std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), ::tolower);
+			if (lowerValue == "true" || lowerValue == "1" || lowerValue == "yes" || lowerValue == "on") {
+				uiVar.boolValue = true;
+			} else if (lowerValue == "false" || lowerValue == "0" || lowerValue == "no" || lowerValue == "off") {
+				uiVar.boolValue = false;
+			} else {
+				// Try to parse as integer (non-zero = true)
+				uiVar.boolValue = std::stoi(value) != 0;
+			}
+			break;
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Failed to parse value '{}' for variable '{}': {}", value, uiVar.name, e.what());
+	}
+}
+
 void Effect::UpdateUIVariables()
 {
 	for (auto& uiVar : uiVariables) {
@@ -841,13 +936,13 @@ void Effect::RenderImGui()
 		if (!isLabelOnly) {
 			ImGui::SameLine();
 			if (uiVar.type == UIVariableType::Float) {
-				if (ImGui::InputFloat(("##" + uiVar.name).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
+				if (ImGui::InputFloat(("##" + uiVar.displayName).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
 					valuesChanged = true;
 				}
 			} else if (uiVar.type == UIVariableType::Int) {
 				if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
 					const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
-					if (ImGui::BeginCombo(("##" + uiVar.name).c_str(), currentItem)) {
+					if (ImGui::BeginCombo(("##" + uiVar.displayName).c_str(), currentItem)) {
 						for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
 							if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
 								uiVar.intValue = i;
@@ -857,12 +952,12 @@ void Effect::RenderImGui()
 						ImGui::EndCombo();
 					}
 				} else {
-					if (ImGui::InputInt(("##" + uiVar.name).c_str(), &uiVar.intValue)) {
+					if (ImGui::InputInt(("##" + uiVar.displayName).c_str(), &uiVar.intValue)) {
 						valuesChanged = true;
 					}
 				}
 			} else if (uiVar.type == UIVariableType::Bool) {
-				if (ImGui::Checkbox(("##" + uiVar.name).c_str(), &uiVar.boolValue)) {
+				if (ImGui::Checkbox(("##" + uiVar.displayName).c_str(), &uiVar.boolValue)) {
 					valuesChanged = true;
 				}
 			}

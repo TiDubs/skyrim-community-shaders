@@ -98,7 +98,7 @@ public:
 	{
 		UIVariableType type;
 		UIWidgetType widgetType;
-		std::string name;
+		LPCSTR name;
 		std::string displayName;
 		ComPtr<ID3DX11EffectVariable> effectVariable;
 
@@ -163,4 +163,5 @@ private:
 	UIWidgetType ParseWidgetType(const std::string& widget);
 	std::vector<std::string> ParseDropdownList(const std::string& list);
 	void LoadUIVariableValue(UIVariable& uiVar);
+	void LoadVariableFromString(UIVariable& uiVar, const std::string& value);
 };
