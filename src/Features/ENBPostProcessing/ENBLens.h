@@ -7,8 +7,6 @@ class ENBLens : public Effect
 public:
 	virtual std::string GetName() const override { return "enblens.fx"; }
 
-	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
-
 	virtual void Execute() override;
 
 	virtual void UpdateEffectVariables() override;

@@ -109,6 +109,9 @@ bool Effect::Apply()
 		return false;
 	}
 
+	// Call virtual texture creation function
+	CreateEffectTextures();
+
 	logger::info("Successfully applied effect '{}'", GetName());
 	return true;
 }
@@ -198,7 +201,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 	logger::debug("Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
-	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
+	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
 	bool renderedToOutput = false;
 
@@ -233,7 +236,10 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 				renderedToOutput = !renderedToOutput;
 			}
 
-			sourceTexture->AsShaderResource()->SetResource(inputSRV);
+			if (sourceTexture && sourceTexture->IsValid()) {
+				sourceTexture->AsShaderResource()->SetResource(inputSRV);
+			}
+
 			context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
 			// Set viewport based on render target description
@@ -280,7 +286,7 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, 
 	logger::debug("Executing single technique '{}'", techniqueName);
 
 	// Set input texture
-	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
+	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 	if (sourceTexture && sourceTexture->IsValid()) {
 		sourceTexture->SetResource(input.srv.Get());
 	}

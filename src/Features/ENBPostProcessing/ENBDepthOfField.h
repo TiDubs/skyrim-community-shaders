@@ -12,14 +12,10 @@ class ENBDepthOfField : public Effect
 public:
 	virtual std::string GetName() const override { return "enbdepthoffield.fx"; }
 
-	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
-
 	virtual void Execute() override;
 	virtual void UpdateEffectVariables() override;
 
-	// Override Apply to create depth of field-specific textures
-	virtual bool Apply() override;
-
-private:
-	void CreateDepthOfFieldTextures();
+protected:
+	// Override virtual texture creation function
+	void CreateEffectTextures() override;
 };

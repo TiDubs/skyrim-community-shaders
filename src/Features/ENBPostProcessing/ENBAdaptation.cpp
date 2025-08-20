@@ -60,17 +60,7 @@ void ENBAdaptation::UpdateEffectVariables()
 }
 
 
-bool ENBAdaptation::Apply()
-{
-	// Call base Apply first
-	bool result = Effect::Apply();
-	if (result) {
-		CreateAdaptationTextures();
-	}
-	return result;
-}
-
-void ENBAdaptation::CreateAdaptationTextures()
+void ENBAdaptation::CreateEffectTextures()
 {
 	auto device = globals::d3d::device;
 
@@ -84,23 +74,6 @@ void ENBAdaptation::CreateAdaptationTextures()
 	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
-
-	// Create TextureAdaptationSwap (1x1 R32F)
-	{
-		texDesc.Width = 1;
-		texDesc.Height = 1;
-
-		Texture textureAdaptationSwap{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAdaptationSwap.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAdaptationSwap.texture.Get(), nullptr, textureAdaptationSwap.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAdaptationSwap.texture.Get(), nullptr, textureAdaptationSwap.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureAdaptationSwap.texture.Get(), "ENBAdaptation::TextureAdaptationSwap");
-		Util::SetResourceName(textureAdaptationSwap.rtv.Get(), "ENBAdaptation::TextureAdaptationSwap RTV");
-		Util::SetResourceName(textureAdaptationSwap.srv.Get(), "ENBAdaptation::TextureAdaptationSwap SRV");
-
-		effectTextureCache["TextureAdaptationSwap"] = std::move(textureAdaptationSwap);
-	}
 
 	// Create TextureCurrent (16x16 R32F)
 	{
@@ -119,22 +92,5 @@ void ENBAdaptation::CreateAdaptationTextures()
 		effectTextureCache["TextureCurrent"] = std::move(textureCurrent);
 	}
 
-	// Create TextureAdaptation (1x1 R32F)
-	{
-		texDesc.Width = 1;
-		texDesc.Height = 1;
-
-		Texture textureAdaptation{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAdaptation.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAdaptation.texture.Get(), nullptr, textureAdaptation.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureAdaptation.texture.Get(), "ENBAdaptation::TextureAdaptation");
-		Util::SetResourceName(textureAdaptation.rtv.Get(), "ENBAdaptation::TextureAdaptation RTV");
-		Util::SetResourceName(textureAdaptation.srv.Get(), "ENBAdaptation::TextureAdaptation SRV");
-
-		effectTextureCache["TextureAdaptation"] = std::move(textureAdaptation);
-	}
-
-	logger::info("Created adaptation textures: TextureAdaptationSwap (1x1), TextureCurrent (16x16), TextureAdaptation (1x1)");
+	logger::info("Created adaptation textures: TextureCurrent (16x16)");
 }

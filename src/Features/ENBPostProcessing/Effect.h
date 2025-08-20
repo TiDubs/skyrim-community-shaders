@@ -41,6 +41,9 @@ public:
 	virtual void Execute() = 0;
 	virtual void UpdateEffectVariables() {}
 
+	// Virtual texture creation function for derived classes to override
+	virtual void CreateEffectTextures() {}
+
 	// UI System
 	void RenderImGui();
 	void LoadUIVariables();
@@ -57,7 +60,6 @@ public:
 	std::string GetTechniqueNameByIndex(uint32_t index) const;
 
 	// Pure virtual methods for derived classes to implement
-	virtual LPCSTR GetSourceTexture() const = 0;
 	virtual std::string GetName() const = 0;
 
 	struct TechniqueInfo

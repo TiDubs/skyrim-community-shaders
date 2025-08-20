@@ -12,17 +12,7 @@ void ENBDepthOfField::UpdateEffectVariables()
 {
 }
 
-bool ENBDepthOfField::Apply()
-{
-	// Call base Apply first
-	bool result = Effect::Apply();
-	if (result) {
-		CreateDepthOfFieldTextures();
-	}
-	return result;
-}
-
-void ENBDepthOfField::CreateDepthOfFieldTextures()
+void ENBDepthOfField::CreateEffectTextures()
 {
 	auto device = globals::d3d::device;
 
