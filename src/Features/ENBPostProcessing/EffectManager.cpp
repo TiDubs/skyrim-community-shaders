@@ -87,6 +87,28 @@ void EffectManager::ExecuteEffects()
 	// Perform shared downsampling once
 	Downsampler::GetSingleton().Downsample(textureOriginal.SRV, sharedDownsampleChain);
 
+	// Backup current render state
+	ComPtr<ID3D11RasterizerState> previousRS;
+	ComPtr<ID3D11BlendState> previousBS;
+	ComPtr<ID3D11DepthStencilState> previousDSS;
+	ComPtr<ID3D11InputLayout> previousIL;
+	FLOAT previousBlendFactor[4];
+	UINT previousSampleMask;
+	UINT previousStencilRef;
+	
+	context->RSGetState(previousRS.GetAddressOf());
+	context->OMGetBlendState(previousBS.GetAddressOf(), previousBlendFactor, &previousSampleMask);
+	context->OMGetDepthStencilState(previousDSS.GetAddressOf(), &previousStencilRef);
+	context->IAGetInputLayout(previousIL.GetAddressOf());
+
+	ID3D11Buffer* previousVBs[1] = { nullptr };
+	UINT previousStrides[1] = { 0 };
+	UINT previousOffsets[1] = { 0 };
+	D3D11_PRIMITIVE_TOPOLOGY previousTopology;
+	context->IAGetVertexBuffers(0, 1, previousVBs, previousStrides, previousOffsets);
+	context->IAGetPrimitiveTopology(&previousTopology);
+
+	// Set our render state
 	context->RSSetState(rasterizerState.Get());
 	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 	context->OMSetDepthStencilState(nullptr, 0);
@@ -107,6 +129,17 @@ void EffectManager::ExecuteEffects()
 			state->EndPerfEvent();
 		}
 	}
+
+	// Restore previous render state
+	context->RSSetState(previousRS.Get());
+	context->OMSetBlendState(previousBS.Get(), previousBlendFactor, previousSampleMask);
+	context->OMSetDepthStencilState(previousDSS.Get(), previousStencilRef);
+	context->IASetInputLayout(previousIL.Get());
+	context->IASetVertexBuffers(0, 1, previousVBs, previousStrides, previousOffsets);
+	context->IASetPrimitiveTopology(previousTopology);
+
+	// Clean up retrieved interfaces
+	if (previousVBs[0]) previousVBs[0]->Release();
 }
 
 Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
@@ -159,6 +192,7 @@ void EffectManager::CreateCommonResources()
 {
 	CreateQuadGeometry();
 	CreateRenderStates();
+	CreateCopyShaders();
 	CreateCommonTextures();
 
 	// Initialize downsampler and create shared downsample chain
@@ -259,6 +293,40 @@ void EffectManager::CreateRenderStates()
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.GetAddressOf()));
+}
+
+void EffectManager::CreateCopyShaders()
+{
+	// Compile pixel shader for texture copy
+	const char* pixelShaderSource = R"(
+		Texture2D sourceTexture : register(t0);
+		
+		struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
+		
+		float4 main(PS_INPUT input) : SV_TARGET {
+			int2 pixelPos = int2(input.pos.xy);
+			return sourceTexture.Load(int3(pixelPos, 0));
+		}
+	)";
+
+	ComPtr<ID3DBlob> psBlob, errorBlob;
+	auto hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
+		"main", "ps_4_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf());
+	
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+		}
+		return;
+	}
+
+	hr = globals::d3d::device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, copyPixelShader.GetAddressOf());
+	if (FAILED(hr)) {
+		logger::error("Failed to create copy pixel shader");
+		return;
+	}
+
+	logger::info("Created texture copy shaders successfully");
 }
 
 void EffectManager::CreateCommonTextures()
@@ -580,4 +648,27 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	if (eInteriorFactor && eInteriorFactor->IsValid()) {
 		eInteriorFactor->SetRawValue(&commonData.eInteriorFactor, 0, sizeof(commonData.eInteriorFactor));
 	}
+}
+
+void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
+{
+	if (!a_source || !a_dest || !copyPixelShader) {
+		logger::critical("Invalid parameters or shaders not initialized for texture copy");
+		return;
+	}
+
+	auto context = globals::d3d::context;
+
+	// Set up for copy operation
+	context->OMSetRenderTargets(1, &a_dest, nullptr);
+	context->OMSetDepthStencilState(nullptr, 0);
+
+	// Set shaders
+	context->PSSetShader(copyPixelShader.Get(), nullptr, 0);
+
+	// Set source texture
+	context->PSSetShaderResources(0, 1, &a_source);
+
+	// Draw fullscreen quad
+	context->Draw(4, 0);
 }

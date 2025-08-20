@@ -53,8 +53,12 @@ public:
 	ComPtr<ID3D11RasterizerState> rasterizerState;
 	ComPtr<ID3D11BlendState> blendState;
 
+	// Copy shader resources
+	ComPtr<ID3D11PixelShader> copyPixelShader;
+
 	void CreateQuadGeometry();
 	void CreateRenderStates();
+	void CreateCopyShaders();
 
 	std::unordered_map<std::string, Effect::Texture> commonTextureCache;
 
@@ -72,6 +76,9 @@ public:
 
 	void CreateCommonTextures();
 	void UpdateCommonData();
+
+	// Texture copy using pixel shader
+	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
 
 	// Downsampling support
 	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
