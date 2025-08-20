@@ -1016,6 +1016,39 @@ void Effect::EnumerateAllVariables()
 	logger::info("Enumerated {} effect variables", variables.size());
 }
 
+bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource)
+{
+	return SetShaderResourceVariable(effect.Get(), variableName, resource);
+}
+
+bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string& variableName, ID3D11ShaderResourceView* resource)
+{
+	if (!effect || !resource) {
+		return false;
+	}
+
+	auto variable = effect->GetVariableByName(variableName.c_str())->AsShaderResource();
+	if (variable && variable->IsValid()) {
+		variable->SetResource(resource);
+		return true;
+	}
+	return false;
+}
+
+bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variableName, const void* data, uint32_t size)
+{
+	if (!effect || !data) {
+		return false;
+	}
+
+	auto variable = effect->GetVariableByName(variableName.c_str())->AsVector();
+	if (variable && variable->IsValid()) {
+		variable->SetRawValue(data, 0, size);
+		return true;
+	}
+	return false;
+}
+
 void Effect::SetSelectedTechniqueIndex(uint32_t index)
 {
 	if (index < uiTechniques.size()) {

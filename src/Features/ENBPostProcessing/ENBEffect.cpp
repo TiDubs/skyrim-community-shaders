@@ -60,21 +60,8 @@ void ENBEffect::UpdateEffectVariables()
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 
-	auto textureBloom = effect->GetVariableByName("TextureBloom")->AsShaderResource();
-	auto textureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
-	auto textureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
-	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
-
-	if (textureBloom && textureBloom->IsValid()) {
-		textureBloom->SetResource(effectManager.GetCommonTexture("TextureBloom")->srv.Get());
-	}
-	if (textureLens && textureLens->IsValid()) {
-		textureLens->SetResource(effectManager.GetCommonTexture("TextureLens")->srv.Get());
-	}
-	if (textureAdaptation && textureAdaptation->IsValid()) {
-		textureAdaptation->SetResource(effectManager.GetCommonTexture("TextureAdaptation")->srv.Get());
-	}
-	if (textureAperture && textureAperture->IsValid()) {
-		textureAperture->SetResource(effectManager.GetCommonTexture("TextureAperture")->srv.Get());
-	}
+	SetShaderResourceVariable("TextureBloom", effectManager.GetCommonTexture("TextureBloom")->srv.Get());
+	SetShaderResourceVariable("TextureLens", effectManager.GetCommonTexture("TextureLens")->srv.Get());
+	SetShaderResourceVariable("TextureAdaptation", effectManager.GetCommonTexture("TextureAdaptation")->srv.Get());
+	SetShaderResourceVariable("TextureAperture", effectManager.GetCommonTexture("TextureAperture")->srv.Get());
 }

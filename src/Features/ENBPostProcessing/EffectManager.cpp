@@ -729,87 +729,38 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 
 	auto renderer = globals::game::renderer;
 
-	// Get variable pointers and set common textures
-	auto textureDepth = effect->GetVariableByName("TextureDepth")->AsShaderResource();
+	// Set common textures
+	Effect::SetShaderResourceVariable(effect, "TextureDepth", 
+		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
 
-	auto renderTargetRGBA32 = effect->GetVariableByName("RenderTargetRGBA32")->AsShaderResource();
-	auto renderTargetRGBA64 = effect->GetVariableByName("RenderTargetRGBA64")->AsShaderResource();
-	auto renderTargetRGBA64F = effect->GetVariableByName("RenderTargetRGBA64F")->AsShaderResource();
-	auto renderTargetR16F = effect->GetVariableByName("RenderTargetR16F")->AsShaderResource();
-	auto renderTargetR32F = effect->GetVariableByName("RenderTargetR32F")->AsShaderResource();
-	auto renderTargetRGB32F = effect->GetVariableByName("RenderTargetRGB32F")->AsShaderResource();
-
-	auto timer = effect->GetVariableByName("Timer")->AsVector();
-	auto screenSize = effect->GetVariableByName("ScreenSize")->AsVector();
-	auto weather = effect->GetVariableByName("Weather")->AsVector();
-	auto timeOfDay1 = effect->GetVariableByName("TimeOfDay1")->AsVector();
-	auto timeOfDay2 = effect->GetVariableByName("TimeOfDay2")->AsVector();
-	auto eNightDayFactor = effect->GetVariableByName("ENightDayFactor")->AsVector();
-	auto eInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
-
-	if (textureDepth && textureDepth->IsValid()) {
-		textureDepth->SetResource(renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
-	}
-
-	if (renderTargetRGBA32 && renderTargetRGBA32->IsValid()) {
-		renderTargetRGBA32->SetResource(commonTextureCache["RenderTargetRGBA32"].srv.Get());
-	}
-	if (renderTargetRGBA64 && renderTargetRGBA64->IsValid()) {
-		renderTargetRGBA64->SetResource(commonTextureCache["RenderTargetRGBA64"].srv.Get());
-	}
-	if (renderTargetRGBA64F && renderTargetRGBA64F->IsValid()) {
-		renderTargetRGBA64F->SetResource(commonTextureCache["RenderTargetRGBA64F"].srv.Get());
-	}
-	if (renderTargetR16F && renderTargetR16F->IsValid()) {
-		renderTargetR16F->SetResource(commonTextureCache["RenderTargetR16F"].srv.Get());
-	}
-	if (renderTargetR32F && renderTargetR32F->IsValid()) {
-		renderTargetR32F->SetResource(commonTextureCache["RenderTargetR32F"].srv.Get());
-	}
-	if (renderTargetRGB32F && renderTargetRGB32F->IsValid()) {
-		renderTargetRGB32F->SetResource(commonTextureCache["RenderTargetRGB32F"].srv.Get());
-	}
-
-	// Bind fixed-size render targets
-	std::vector<std::pair<std::string, UINT>> fixedSizes = {
-		{ "RenderTarget1024", 1024 },
-		{ "RenderTarget512", 512 },
-		{ "RenderTarget256", 256 },
-		{ "RenderTarget128", 128 },
-		{ "RenderTarget64", 64 },
-		{ "RenderTarget32", 32 },
-		{ "RenderTarget16", 16 }
+	// Set format-specific render targets
+	const std::vector<std::string> formatTargets = {
+		"RenderTargetRGBA32", "RenderTargetRGBA64", "RenderTargetRGBA64F",
+		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
 	};
 
-	for (const auto& [name, size] : fixedSizes) {
-		auto renderTarget = effect->GetVariableByName(name.c_str())->AsShaderResource();
-		if (renderTarget && renderTarget->IsValid()) {
-			renderTarget->SetResource(commonTextureCache[name].srv.Get());
-		}
+	for (const auto& targetName : formatTargets) {
+		Effect::SetShaderResourceVariable(effect, targetName, commonTextureCache[targetName].srv.Get());
 	}
 
-	// Set variable data
-	if (timer && timer->IsValid()) {
-		timer->SetRawValue(commonData.timer, 0, sizeof(commonData.timer));
+	// Set fixed-size render targets
+	const std::vector<std::string> fixedSizeTargets = {
+		"RenderTarget1024", "RenderTarget512", "RenderTarget256", "RenderTarget128",
+		"RenderTarget64", "RenderTarget32", "RenderTarget16"
+	};
+
+	for (const auto& targetName : fixedSizeTargets) {
+		Effect::SetShaderResourceVariable(effect, targetName, commonTextureCache[targetName].srv.Get());
 	}
-	if (screenSize && screenSize->IsValid()) {
-		screenSize->SetRawValue(commonData.screenSize, 0, sizeof(commonData.screenSize));
-	}
-	if (weather && weather->IsValid()) {
-		weather->SetRawValue(commonData.weather, 0, sizeof(commonData.weather));
-	}
-	if (timeOfDay1 && timeOfDay1->IsValid()) {
-		timeOfDay1->SetRawValue(commonData.timeOfDay1, 0, sizeof(commonData.timeOfDay1));
-	}
-	if (timeOfDay2 && timeOfDay2->IsValid()) {
-		timeOfDay2->SetRawValue(commonData.timeOfDay2, 0, sizeof(commonData.timeOfDay2));
-	}
-	if (eNightDayFactor && eNightDayFactor->IsValid()) {
-		eNightDayFactor->SetRawValue(&commonData.eNightDayFactor, 0, sizeof(commonData.eNightDayFactor));
-	}
-	if (eInteriorFactor && eInteriorFactor->IsValid()) {
-		eInteriorFactor->SetRawValue(&commonData.eInteriorFactor, 0, sizeof(commonData.eInteriorFactor));
-	}
+
+	// Set vector variables
+	Effect::SetVectorVariable(effect, "Timer", commonData.timer, sizeof(commonData.timer));
+	Effect::SetVectorVariable(effect, "ScreenSize", commonData.screenSize, sizeof(commonData.screenSize));
+	Effect::SetVectorVariable(effect, "Weather", commonData.weather, sizeof(commonData.weather));
+	Effect::SetVectorVariable(effect, "TimeOfDay1", commonData.timeOfDay1, sizeof(commonData.timeOfDay1));
+	Effect::SetVectorVariable(effect, "TimeOfDay2", commonData.timeOfDay2, sizeof(commonData.timeOfDay2));
+	Effect::SetVectorVariable(effect, "ENightDayFactor", &commonData.eNightDayFactor, sizeof(commonData.eNightDayFactor));
+	Effect::SetVectorVariable(effect, "EInteriorFactor", &commonData.eInteriorFactor, sizeof(commonData.eInteriorFactor));
 }
 
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
