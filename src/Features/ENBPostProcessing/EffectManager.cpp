@@ -682,7 +682,7 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureSDRTemp2", textureColor });
 	}
 
-	// Create 1x1 textures for adaptation and aperture
+	// Create 1x1 textures for adaptation
 	texDesc.Width = 1;
 	texDesc.Height = 1;
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
@@ -713,20 +713,6 @@ void EffectManager::CreateCommonTextures()
 		Util::SetResourceName(adaptationTexture.srv.Get(), "EffectManager::TextureAdaptationSwap SRV");
 
 		commonTextureCache.insert({ "TextureAdaptationSwap", adaptationTexture });
-	}
-
-	// Create TextureAperture
-	{
-		Effect::Texture apertureTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, apertureTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(apertureTexture.texture.Get(), nullptr, apertureTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(apertureTexture.texture.Get(), nullptr, apertureTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(apertureTexture.texture.Get(), "EffectManager::TextureAperture");
-		Util::SetResourceName(apertureTexture.rtv.Get(), "EffectManager::TextureAperture RTV");
-		Util::SetResourceName(apertureTexture.srv.Get(), "EffectManager::TextureAperture SRV");
-
-		commonTextureCache.insert({ "TextureAperture", apertureTexture });
 	}
 
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -760,7 +746,7 @@ void EffectManager::CreateCommonTextures()
 
 	logger::info("[ENBPP] Created temporary render targets: 1024, 512, 256, 128, 64, 32, 16");
 
-	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAdaptationSwap, TextureAperture");
+	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAdaptationSwap");
 }
 
 void EffectManager::UpdateCommonData()

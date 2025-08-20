@@ -45,7 +45,6 @@ void ENBAdaptation::Execute()
 
 void ENBAdaptation::UpdateEffectVariables()
 {
-	// Set adaptation textures
 	auto& effectManager = EffectManager::GetSingleton();
 
 	float4 adaptationParameters{};
