@@ -206,13 +206,13 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	// Check if the technique sequence exists
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
-		logger::error("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
+		logger::trace("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
 		return;
 	}
 
 	const auto& sequence = sequenceIt->second;
 
-	logger::debug("[ENBPP] Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
+	logger::trace("[ENBPP] Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
@@ -221,7 +221,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
 
-		logger::debug("[ENBPP] Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
+		logger::trace("[ENBPP] Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
 
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
@@ -304,11 +304,11 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& output)
 	// Find the technique
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
 	if (!technique || !technique->IsValid()) {
-		logger::error("[ENBPP] Technique '{}' not found or invalid", techniqueName);
+		logger::trace("[ENBPP] Technique '{}' not found or invalid", techniqueName);
 		return;
 	}
 
-	logger::debug("[ENBPP] Executing single technique '{}'", techniqueName);
+	logger::trace("[ENBPP] Executing single technique '{}'", techniqueName);
 
 	// Set output render target
 	context->OMSetRenderTargets(1, output.rtv.GetAddressOf(), nullptr);
