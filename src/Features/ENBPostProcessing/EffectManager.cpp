@@ -201,25 +201,25 @@ void EffectManager::RenderImGui()
 			}
 
 			if (ImGui::TreeNodeEx("COLORCORRECTION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness, 0.01f, 0.0f, 3.0f);
-				ImGui::DragFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve, 0.01f, 0.1f, 3.0f);
+				ImGui::SliderFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness, 0.0f, 3.0f, "%.2f");
+				ImGui::SliderFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve, 0.1f, 3.0f, "%.2f");
 
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("ADAPTATION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity, 0.01f, 0.0f, 2.0f);
+				ImGui::SliderFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity, 0.0f, 2.0f, "%.2f");
 				ImGui::Checkbox("ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
-				ImGui::DragFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.01f, 0.0f, 1.0f);
-				ImGui::DragFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.01f, 0.0f, 5.0f);
-				ImGui::DragFloat("AdaptationTime", &enbSettings.ADAPTATION.AdaptationTime, 0.1f, 0.0f, 10.0f);
+				ImGui::SliderFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.0f, 1.0f, "%.2f");
+				ImGui::SliderFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.0f, 5.0f, "%.2f");
+				ImGui::SliderFloat("AdaptationTime", &enbSettings.ADAPTATION.AdaptationTime, 0.0f, 10.0f, "%.1f");
 
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("DEPTHOFFIELD", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime, 0.1f, 0.0f, 10.0f);
-				ImGui::DragFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime, 0.1f, 0.0f, 10.0f);
+				ImGui::SliderFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime, 0.0f, 10.0f, "%.1f");
+				ImGui::SliderFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime, 0.0f, 10.0f, "%.1f");
 
 				ImGui::TreePop();
 			}
@@ -492,262 +492,31 @@ void EffectManager::CreateColorCorrectionShader()
 
 void EffectManager::CreateCommonTextures()
 {
-	auto device = globals::d3d::device;
 	auto state = globals::state;
-
 	UINT screenWidth = static_cast<UINT>(state->screenSize.x);
 	UINT screenHeight = static_cast<UINT>(state->screenSize.y);
 
-	D3D11_TEXTURE2D_DESC texDesc = {};
-	texDesc.Width = screenWidth;
-	texDesc.Height = screenHeight;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	texDesc.CPUAccessFlags = 0;
-	texDesc.MiscFlags = 0;
+	commonTextureCache.insert({ "TextureHDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp") });
+	commonTextureCache.insert({ "TextureHDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp2") });
+	
+	commonTextureCache.insert({ "RenderTargetRGBA32", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R8G8B8A8_UNORM, "EffectManager::RenderTargetRGBA32") });
+	commonTextureCache.insert({ "RenderTargetRGBA64", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_UNORM, "EffectManager::RenderTargetRGBA64") });
+	commonTextureCache.insert({ "RenderTargetRGBA64F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::RenderTargetRGBA64F") });
+	commonTextureCache.insert({ "RenderTargetR16F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16_FLOAT, "EffectManager::RenderTargetR16F") });
+	commonTextureCache.insert({ "RenderTargetR32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R32_FLOAT, "EffectManager::RenderTargetR32F") });
+	commonTextureCache.insert({ "RenderTargetRGB32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R11G11B10_FLOAT, "EffectManager::RenderTargetRGB32F") });
+	
+	commonTextureCache.insert({ "TextureSDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp") });
+	commonTextureCache.insert({ "TextureSDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp2") });
+	
+	commonTextureCache.insert({ "TextureBloom", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloom") });
+	commonTextureCache.insert({ "TextureLens", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureLens") });
 
-	// Create TextureHDRTemp
-	{
-		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureHDRTemp");
-		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureHDRTemp RTV");
-		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureHDRTemp SRV");
-
-		commonTextureCache.insert({ "TextureHDRTemp", textureColor });
-	}
-
-	// Create TextureHDRTemp2
-	{
-		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureHDRTemp2");
-		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureHDRTemp2 RTV");
-		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureHDRTemp2 SRV");
-
-		commonTextureCache.insert({ "TextureHDRTemp2", textureColor });
-	}
-
-	// Create TextureLens
-	{
-		Effect::Texture lensTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, lensTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(lensTexture.texture.Get(), nullptr, lensTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(lensTexture.texture.Get(), nullptr, lensTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(lensTexture.texture.Get(), "EffectManager::TextureLens");
-		Util::SetResourceName(lensTexture.rtv.Get(), "EffectManager::TextureLens RTV");
-		Util::SetResourceName(lensTexture.srv.Get(), "EffectManager::TextureLens SRV");
-
-		commonTextureCache.insert({ "TextureLens", lensTexture });
-	}
-
-	// Create RenderTargetRGBA32 (R8G8B8A8 32 bit ldr format)
-	{
-		D3D11_TEXTURE2D_DESC rgba32Desc = texDesc;
-		rgba32Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		Effect::Texture rgba32Texture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgba32Desc, nullptr, rgba32Texture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.srv.GetAddressOf()));
-
-		Util::SetResourceName(rgba32Texture.texture.Get(), "EffectManager::RenderTargetRGBA32");
-		Util::SetResourceName(rgba32Texture.rtv.Get(), "EffectManager::RenderTargetRGBA32 RTV");
-		Util::SetResourceName(rgba32Texture.srv.Get(), "EffectManager::RenderTargetRGBA32 SRV");
-
-		commonTextureCache.insert({ "RenderTargetRGBA32", rgba32Texture });
-	}
-
-	// Create RenderTargetRGBA64 (R16B16G16A16 64 bit ldr format)
-	{
-		D3D11_TEXTURE2D_DESC rgba64Desc = texDesc;
-		rgba64Desc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
-		Effect::Texture rgba64Texture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64Desc, nullptr, rgba64Texture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.srv.GetAddressOf()));
-
-		Util::SetResourceName(rgba64Texture.texture.Get(), "EffectManager::RenderTargetRGBA64");
-		Util::SetResourceName(rgba64Texture.rtv.Get(), "EffectManager::RenderTargetRGBA64 RTV");
-		Util::SetResourceName(rgba64Texture.srv.Get(), "EffectManager::RenderTargetRGBA64 SRV");
-
-		commonTextureCache.insert({ "RenderTargetRGBA64", rgba64Texture });
-	}
-
-	// Create RenderTargetRGBA64F (R16B16G16A16F 64 bit hdr format)
-	{
-		D3D11_TEXTURE2D_DESC rgba64fDesc = texDesc;
-		rgba64fDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		Effect::Texture rgba64fTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64fDesc, nullptr, rgba64fTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(rgba64fTexture.texture.Get(), "EffectManager::RenderTargetRGBA64F");
-		Util::SetResourceName(rgba64fTexture.rtv.Get(), "EffectManager::RenderTargetRGBA64F RTV");
-		Util::SetResourceName(rgba64fTexture.srv.Get(), "EffectManager::RenderTargetRGBA64F SRV");
-
-		commonTextureCache.insert({ "RenderTargetRGBA64F", rgba64fTexture });
-	}
-
-	// Create RenderTargetR16F (R16F 16 bit hdr format with red channel only)
-	{
-		D3D11_TEXTURE2D_DESC r16fDesc = texDesc;
-		r16fDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		Effect::Texture r16fTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&r16fDesc, nullptr, r16fTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(r16fTexture.texture.Get(), nullptr, r16fTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(r16fTexture.texture.Get(), nullptr, r16fTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(r16fTexture.texture.Get(), "EffectManager::RenderTargetR16F");
-		Util::SetResourceName(r16fTexture.rtv.Get(), "EffectManager::RenderTargetR16F RTV");
-		Util::SetResourceName(r16fTexture.srv.Get(), "EffectManager::RenderTargetR16F SRV");
-
-		commonTextureCache.insert({ "RenderTargetR16F", r16fTexture });
-	}
-
-	// Create RenderTargetR32F (R32F 32 bit hdr format with red channel only)
-	{
-		D3D11_TEXTURE2D_DESC r32fDesc = texDesc;
-		r32fDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		Effect::Texture r32fTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&r32fDesc, nullptr, r32fTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(r32fTexture.texture.Get(), nullptr, r32fTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(r32fTexture.texture.Get(), nullptr, r32fTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(r32fTexture.texture.Get(), "EffectManager::RenderTargetR32F");
-		Util::SetResourceName(r32fTexture.rtv.Get(), "EffectManager::RenderTargetR32F RTV");
-		Util::SetResourceName(r32fTexture.srv.Get(), "EffectManager::RenderTargetR32F SRV");
-
-		commonTextureCache.insert({ "RenderTargetR32F", r32fTexture });
-	}
-
-	// Create RenderTargetRGB32F (32 bit hdr format without alpha)
-	{
-		D3D11_TEXTURE2D_DESC rgb32fDesc = texDesc;
-		rgb32fDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		Effect::Texture rgb32fTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgb32fDesc, nullptr, rgb32fTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(rgb32fTexture.texture.Get(), "EffectManager::RenderTargetRGB32F");
-		Util::SetResourceName(rgb32fTexture.rtv.Get(), "EffectManager::RenderTargetRGB32F RTV");
-		Util::SetResourceName(rgb32fTexture.srv.Get(), "EffectManager::RenderTargetRGB32F SRV");
-
-		commonTextureCache.insert({ "RenderTargetRGB32F", rgb32fTexture });
-	}
-
-	// Create TextureSDRTemp
-	{
-		D3D11_TEXTURE2D_DESC rgb10uDesc = texDesc;
-		rgb10uDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-
-		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgb10uDesc, nullptr, textureColor.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureSDRTemp");
-		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureSDRTemp RTV");
-		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureSDRTemp SRV");
-
-		commonTextureCache.insert({ "TextureSDRTemp", textureColor });
-	}
-
-	{
-		D3D11_TEXTURE2D_DESC rgb10uDesc = texDesc;
-		rgb10uDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-
-		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&rgb10uDesc, nullptr, textureColor.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureSDRTemp2");
-		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureSDRTemp2 RTV");
-		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureSDRTemp2 SRV");
-
-		commonTextureCache.insert({ "TextureSDRTemp2", textureColor });
-	}
-
-	texDesc.Width = 1024;
-	texDesc.Height = 1024;
-
-	// Create TextureBloom
-	{
-		Effect::Texture bloomTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(bloomTexture.texture.Get(), "EffectManager::TextureBloom");
-		Util::SetResourceName(bloomTexture.rtv.Get(), "EffectManager::TextureBloom RTV");
-		Util::SetResourceName(bloomTexture.srv.Get(), "EffectManager::TextureBloom SRV");
-
-		commonTextureCache.insert({ "TextureBloom", bloomTexture });
-	}
-
-	// Create TextureBloomTemp
-	{
-		Effect::Texture bloomTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(bloomTexture.texture.Get(), "EffectManager::TextureBloomTemp");
-		Util::SetResourceName(bloomTexture.rtv.Get(), "EffectManager::TextureBloomTemp RTV");
-		Util::SetResourceName(bloomTexture.srv.Get(), "EffectManager::TextureBloomTemp SRV");
-
-		commonTextureCache.insert({ "TextureBloomTemp", bloomTexture });
-	}
-
-	// Create 1x1 textures for adaptation
-	texDesc.Width = 1;
-	texDesc.Height = 1;
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-
-	// Create TextureAdaptation
-	{
-		Effect::Texture adaptationTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(adaptationTexture.texture.Get(), "EffectManager::TextureAdaptation");
-		Util::SetResourceName(adaptationTexture.rtv.Get(), "EffectManager::TextureAdaptation RTV");
-		Util::SetResourceName(adaptationTexture.srv.Get(), "EffectManager::TextureAdaptation SRV");
-
-		commonTextureCache.insert({ "TextureAdaptation", adaptationTexture });
-	}
-
-	// Create TextureAdaptationSwap
-	{
-		Effect::Texture adaptationTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(adaptationTexture.texture.Get(), "EffectManager::TextureAdaptationSwap");
-		Util::SetResourceName(adaptationTexture.rtv.Get(), "EffectManager::TextureAdaptationSwap RTV");
-		Util::SetResourceName(adaptationTexture.srv.Get(), "EffectManager::TextureAdaptationSwap SRV");
-
-		commonTextureCache.insert({ "TextureAdaptationSwap", adaptationTexture });
-	}
-
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-
+	commonTextureCache.insert({ "TextureBloomLensTemp", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloomLensTemp") });
+	
+	commonTextureCache.insert({ "TextureAdaptation", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptation") });
+	commonTextureCache.insert({ "TextureAdaptationSwap", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptationSwap") });
+	
 	// Create fixed-size render targets for bloom/lens
 	std::vector<std::pair<std::string, UINT>> fixedSizes = {
 		{ "RenderTarget1024", 1024 },
@@ -760,24 +529,8 @@ void EffectManager::CreateCommonTextures()
 	};
 
 	for (auto& [name, size] : fixedSizes) {
-		texDesc.Width = size;
-		texDesc.Height = size;
-
-		Effect::Texture fixedTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.Get(), nullptr, fixedTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), nullptr, fixedTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(fixedTexture.texture.Get(), ("EffectManager::" + name).c_str());
-		Util::SetResourceName(fixedTexture.rtv.Get(), ("EffectManager::" + name + " RTV").c_str());
-		Util::SetResourceName(fixedTexture.srv.Get(), ("EffectManager::" + name + " SRV").c_str());
-
-		commonTextureCache[name] = std::move(fixedTexture);
+		commonTextureCache[name] = Effect::CreateTexture(size, size, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::" + name);
 	}
-
-	logger::info("[ENBPP] Created temporary render targets: 1024, 512, 256, 128, 64, 32, 16");
-
-	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAdaptationSwap");
 }
 
 void EffectManager::UpdateCommonData()
@@ -1094,7 +847,7 @@ void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDay
 
 	for (const auto& timeOfDay : timeOfDayNames) {
 		std::string label = prefix + timeOfDay;
-		ImGui::DragFloat(label.c_str(), &settings[timeOfDay], 0.1f, 0.0f, 10.0f);
+		ImGui::SliderFloat(label.c_str(), &settings[timeOfDay], 0.0f, 10.0f, "%.1f");
 	}
 }
 

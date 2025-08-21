@@ -1025,7 +1025,6 @@ void Effect::RenderImGui()
 								(uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
 
 			if (isLabelOnly) {
-				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImVec4(0.2f, 0.2f, 0.2f, 1.0f)));
 				continue;
 			}
 
@@ -1036,7 +1035,7 @@ void Effect::RenderImGui()
 
 			switch (uiVar.type) {
 			case UIVariableType::Float:
-				if (ImGui::InputFloat(id.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
+				if (ImGui::SliderFloat(id.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
 					valuesChanged = true;
 				}
 				break;
@@ -1054,7 +1053,7 @@ void Effect::RenderImGui()
 						ImGui::EndCombo();
 					}
 				} else {
-					if (ImGui::InputInt(id.c_str(), &uiVar.intValue, 0)) {
+					if (ImGui::SliderInt(id.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
 						valuesChanged = true;
 					}
 				}
@@ -1151,6 +1150,37 @@ bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variabl
 		return true;
 	}
 	return false;
+}
+
+Effect::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
+{
+	auto device = globals::d3d::device;
+
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = width;
+	texDesc.Height = height;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = format;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.CPUAccessFlags = 0;
+	texDesc.MiscFlags = 0;
+
+	Texture texture{};
+	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.Get(), nullptr, texture.rtv.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.Get(), nullptr, texture.srv.GetAddressOf()));
+
+	if (!debugName.empty()) {
+		Util::SetResourceName(texture.texture.Get(), (debugName).c_str());
+		Util::SetResourceName(texture.rtv.Get(), (debugName + " RTV").c_str());
+		Util::SetResourceName(texture.srv.Get(), (debugName + " SRV").c_str());
+	}
+
+	return texture;
 }
 
 void Effect::SetSelectedTechniqueIndex(uint32_t index)

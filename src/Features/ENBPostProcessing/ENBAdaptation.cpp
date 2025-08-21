@@ -60,35 +60,5 @@ void ENBAdaptation::UpdateEffectVariables()
 
 void ENBAdaptation::CreateEffectTextures()
 {
-	auto device = globals::d3d::device;
-
-	D3D11_TEXTURE2D_DESC texDesc = {};
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;  // R32F format (red channel only)
-	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
-	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	texDesc.CPUAccessFlags = 0;
-	texDesc.MiscFlags = 0;
-
-	// Create TextureCurrent (16x16 R32F)
-	{
-		texDesc.Width = 16;
-		texDesc.Height = 16;
-
-		Texture textureCurrent{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureCurrent.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(textureCurrent.texture.Get(), nullptr, textureCurrent.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(textureCurrent.texture.Get(), nullptr, textureCurrent.srv.GetAddressOf()));
-
-		Util::SetResourceName(textureCurrent.texture.Get(), "ENBAdaptation::TextureCurrent");
-		Util::SetResourceName(textureCurrent.rtv.Get(), "ENBAdaptation::TextureCurrent RTV");
-		Util::SetResourceName(textureCurrent.srv.Get(), "ENBAdaptation::TextureCurrent SRV");
-
-		effectTextureCache["TextureCurrent"] = std::move(textureCurrent);
-	}
-
-	logger::info("[ENBPP] Created adaptation textures: TextureCurrent (16x16)");
+	effectTextureCache["TextureCurrent"] = CreateTexture(16, 16, DXGI_FORMAT_R32_FLOAT, "ENBAdaptation::TextureCurrent");
 }
