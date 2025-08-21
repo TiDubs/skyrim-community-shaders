@@ -285,7 +285,7 @@ void SettingsRegistry::SaveWeatherSettings(const std::string& weatherKey, const 
 	}
 
 	const auto& weatherSettingMap = weatherIt->second;
-	
+
 	// Create directory if it doesn't exist
 	std::filesystem::path weatherFilePath(filePath);
 	std::filesystem::create_directories(weatherFilePath.parent_path());
@@ -299,11 +299,11 @@ void SettingsRegistry::SaveWeatherSettings(const std::string& weatherKey, const 
 		}
 
 		const auto& setting = *settingIt->second;
-		
+
 		// Create a temporary setting with the weather value
 		SettingInfo tempSetting = setting;
 		tempSetting.currentValue = value;
-		
+
 		// Save to weather file
 		SaveSettingToFile(filePath, setting.category, setting.key, tempSetting);
 	}
@@ -325,7 +325,7 @@ void SettingsRegistry::SaveAllWeatherSettings()
 	int savedCount = 0;
 	for (const auto& [sectionName, entry] : weatherEntries) {
 		std::string weatherFilePath = "enbseries/" + entry.fileName;
-		
+
 		// Create directory if it doesn't exist
 		std::filesystem::path weatherFilePathObj(weatherFilePath);
 		std::filesystem::create_directories(weatherFilePathObj.parent_path());
@@ -370,7 +370,7 @@ void SettingsRegistry::SaveAllWeatherSettings()
 				}
 			}
 		}
-		
+
 		savedCount++;
 		logger::debug("[SettingsRegistry] Saved settings to weather file: {}", weatherFilePath);
 	}
@@ -382,14 +382,13 @@ void SettingsRegistry::ReloadAllWeatherSettings()
 {
 	// Clear existing weather settings
 	weatherSettings.clear();
-	
+
 	// Reload through WeatherManager
 	auto& weatherManager = WeatherManager::GetSingleton();
-	weatherManager.Initialize(); // This will reload _weatherlist.ini and all weather files
-	
+	weatherManager.Initialize();  // This will reload _weatherlist.ini and all weather files
+
 	logger::info("[SettingsRegistry] Reloaded all weather settings");
 }
-
 
 void SettingsRegistry::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
