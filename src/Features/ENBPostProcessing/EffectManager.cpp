@@ -7,6 +7,7 @@
 #include "ENBEffectPrePass.h"
 #include "ENBLens.h"
 #include "Effect.h"
+#include "WeatherManager.h"
 #include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -25,6 +26,7 @@ void EffectManager::Initialize()
 	RegisterEffects();
 	ApplyEffects();
 	LoadENBSettings();
+	WeatherManager::GetSingleton().Initialize();
 }
 
 void EffectManager::RegisterEffects()
@@ -284,14 +286,107 @@ void EffectManager::RenderImGui()
 				ImGui::TreePop();
 			}
 
+			if (ImGui::TreeNodeEx("WEATHER CONTROL", ImGuiTreeNodeFlags_DefaultOpen)) {
+				auto& weatherManager = WeatherManager::GetSingleton();
+				
+				// Current weather status
+				uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+				uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+				float blendFactor = commonData.weather[2];			
+
+				ImGui::Text("Current: 0x%X, Last: 0x%X", currentWeatherID, lastWeatherID);
+				ImGui::Text("Blend Factor: %.2f", blendFactor);	
+			
+				ImGui::Separator();
+				
+				// Weather selection
+				const auto& weatherEntries = weatherManager.GetWeatherEntries();
+				if (!weatherEntries.empty()) {
+					ImGui::Text("Available Weather Files:");
+					
+					// Create a sorted list for display
+					std::vector<std::pair<std::string, const WeatherManager::WeatherEntry*>> sortedWeathers;
+					for (const auto& [key, entry] : weatherEntries) {
+						if (!entry.fileName.empty()) {
+							sortedWeathers.emplace_back(key, &entry);
+						}
+					}
+					
+					std::sort(sortedWeathers.begin(), sortedWeathers.end());
+					
+					if (ImGui::BeginChild("WeatherList", ImVec2(0, 200), true)) {
+						for (const auto& [key, entry] : sortedWeathers) {
+							ImGui::PushID(key.c_str());
+							
+							// Show weather file name and IDs
+							ImGui::Text("%s", entry->fileName.c_str());
+							ImGui::SameLine();
+							ImGui::Text("(%s)", key.c_str());
+							
+							// Show weather IDs on same line
+							ImGui::SameLine();
+							std::string idsText = "IDs: ";
+							for (size_t i = 0; i < entry->weatherIDs.size() && i < 3; ++i) {
+								if (i > 0) idsText += ", ";
+								idsText += std::format("0x{:X}", entry->weatherIDs[i]);
+							}
+							if (entry->weatherIDs.size() > 3) {
+								idsText += "...";
+							}
+							ImGui::Text("%s", idsText.c_str());						
+							
+							ImGui::PopID();
+						}
+					}
+					ImGui::EndChild();
+				} else {
+					ImGui::Text("No weather files loaded");
+					ImGui::Text("Make sure _weatherlist.ini exists in enbseries folder");
+				}
+				
+				ImGui::TreePop();
+			}
+
 			if (ImGui::TreeNodeEx("BLOOM", ImGuiTreeNodeFlags_DefaultOpen)) {
-				RenderTimeOfDaySettings("Amount", enbSettings.BLOOM.Amount);
+				// Check if weather settings are active
+				auto& weatherManager = WeatherManager::GetSingleton();
+		
+				uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+				uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+				bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
+					                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+				
+				if (hasWeatherSettings) {
+					auto effectiveSettings = GetEffectiveBloomAmount();
+					ImGui::BeginDisabled(true);
+					RenderTimeOfDaySettings("Amount", effectiveSettings);
+					ImGui::EndDisabled();
+				} else {
+					ImGui::Text("Using ENB Settings (No Weather Data)");
+					RenderTimeOfDaySettings("Amount", enbSettings.BLOOM.Amount);
+				}
 
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("LENS", ImGuiTreeNodeFlags_DefaultOpen)) {
-				RenderTimeOfDaySettings("Amount", enbSettings.LENS.Amount);
+				// Check if weather settings are active
+				auto& weatherManager = WeatherManager::GetSingleton();
+					
+				uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+				uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+				bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
+					                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+						
+				if (hasWeatherSettings) {
+					auto effectiveSettings = GetEffectiveLensAmount();
+					ImGui::BeginDisabled(true);
+					RenderTimeOfDaySettings("Amount", effectiveSettings);
+					ImGui::EndDisabled();
+				} else {
+					ImGui::Text("Using ENB Settings (No Weather Data)");
+					RenderTimeOfDaySettings("Amount", enbSettings.LENS.Amount);
+				}
 
 				ImGui::TreePop();
 			}
@@ -622,8 +717,13 @@ void EffectManager::UpdateCommonData()
 
 	// Update weather
 	{
-		commonData.weather[0] = sky->currentWeather ? static_cast<float>(sky->currentWeather->formID) : 0;
-		commonData.weather[1] = sky->lastWeather ? static_cast<float>(sky->lastWeather->formID) : 0;
+		// Strip plugin index (2 leftmost digits) from form IDs
+		auto stripPluginIndex = [](uint32_t formID) -> uint32_t {
+			return formID & 0x00FFFFFF;  // Keep only the lower 6 hex digits
+		};
+		
+		commonData.weather[0] = sky->currentWeather ? static_cast<float>(stripPluginIndex(sky->currentWeather->formID)) : 0;
+		commonData.weather[1] = sky->lastWeather ? static_cast<float>(stripPluginIndex(sky->lastWeather->formID)) : 0;
 		commonData.weather[2] = sky->currentWeatherPct;
 		commonData.weather[3] = sky->currentGameHour;
 	}
@@ -699,7 +799,7 @@ void EffectManager::UpdateCommonData()
 
 	// Update interior factor
 	{
-		commonData.eInteriorFactor = sky->mode.any(RE::Sky::Mode::kInterior) ? 1.0f : 0.0f;
+		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
 	}
 }
 
@@ -961,20 +1061,80 @@ void EffectManager::SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& s
 
 float EffectManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings)
 {
-	// timeOfDay1: [Dawn, Sunrise, Day, Sunset] (x, y, z, w)
-	// timeOfDay2: [Dusk, Night, 0, 0] (x, y, z, w)
+	// Use WeatherManager's time-of-day computation which handles interior/exterior
+	auto& weatherManager = WeatherManager::GetSingleton();
+	return weatherManager.ComputeTimeOfDayValue(
+		WeatherManager::TimeOfDaySettings{
+			settings.Dawn, settings.Sunrise, settings.Day, 
+			settings.Sunset, settings.Dusk, settings.Night, 1.0f, 1.0f
+		}, 
+		commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor
+	);
+}
 
-	float result = 0.0f;
+WeatherManager::WeatherSettings EffectManager::GetCurrentWeatherSettings()
+{
+	auto& weatherManager = WeatherManager::GetSingleton();
+	
+	// Get current weather IDs from commonData
+	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+	float blendFactor = commonData.weather[2];
+	
+	return weatherManager.GetInterpolatedSettings(currentWeatherID, lastWeatherID, blendFactor);
+}
 
-	// Apply timeOfDay1 contributions
-	result += commonData.timeOfDay1[0] * settings.Dawn;     // Dawn
-	result += commonData.timeOfDay1[1] * settings.Sunrise;  // Sunrise
-	result += commonData.timeOfDay1[2] * settings.Day;      // Day
-	result += commonData.timeOfDay1[3] * settings.Sunset;   // Sunset
+EffectManager::TimeOfDaySettings EffectManager::GetEffectiveBloomAmount()
+{
+	auto weatherSettings = GetCurrentWeatherSettings();
+	auto& weatherManager = WeatherManager::GetSingleton();
+	
+	// Check if we have valid weather settings
+	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
+		                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+	
+	if (hasWeatherSettings) {
+		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
+		TimeOfDaySettings result;
+		result.Dawn = weatherSettings.BLOOM.Amount.Dawn;
+		result.Sunrise = weatherSettings.BLOOM.Amount.Sunrise;
+		result.Day = weatherSettings.BLOOM.Amount.Day;
+		result.Sunset = weatherSettings.BLOOM.Amount.Sunset;
+		result.Dusk = weatherSettings.BLOOM.Amount.Dusk;
+		result.Night = weatherSettings.BLOOM.Amount.Night;
+		return result;
+	}
+	
+	// Fallback to ENB settings
+	return enbSettings.BLOOM.Amount;
+}
 
-	// Apply timeOfDay2 contributions
-	result += commonData.timeOfDay2[0] * settings.Dusk;   // Dusk
-	result += commonData.timeOfDay2[1] * settings.Night;  // Night
-
-	return result;
+EffectManager::TimeOfDaySettings EffectManager::GetEffectiveLensAmount()
+{
+	auto weatherSettings = GetCurrentWeatherSettings();
+	auto& weatherManager = WeatherManager::GetSingleton();
+	
+	// Check if we have valid weather settings
+	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
+	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
+	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
+		                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+	
+	
+	if (hasWeatherSettings) {
+		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
+		TimeOfDaySettings result;
+		result.Dawn = weatherSettings.LENS.Amount.Dawn;
+		result.Sunrise = weatherSettings.LENS.Amount.Sunrise;
+		result.Day = weatherSettings.LENS.Amount.Day;
+		result.Sunset = weatherSettings.LENS.Amount.Sunset;
+		result.Dusk = weatherSettings.LENS.Amount.Dusk;
+		result.Night = weatherSettings.LENS.Amount.Night;
+		return result;
+	}
+	
+	// Fallback to ENB settings
+	return enbSettings.LENS.Amount;
 }

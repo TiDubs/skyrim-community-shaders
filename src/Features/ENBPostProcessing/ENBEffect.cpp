@@ -61,8 +61,8 @@ void ENBEffect::UpdateEffectVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	float4 enbParams01{};
-	enbParams01.x = effectManager.ComputeTimeOfDayValue(effectManager.enbSettings.BLOOM.Amount);
-	enbParams01.y = effectManager.ComputeTimeOfDayValue(effectManager.enbSettings.LENS.Amount);
+	enbParams01.x = effectManager.ComputeTimeOfDayValue(effectManager.GetEffectiveBloomAmount());
+	enbParams01.y = effectManager.ComputeTimeOfDayValue(effectManager.GetEffectiveLensAmount());
 
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));

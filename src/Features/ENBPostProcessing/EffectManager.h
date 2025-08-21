@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Downsampler.h"
+#include "WeatherManager.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -175,4 +176,11 @@ public:
 
 	// Time of day computation
 	float ComputeTimeOfDayValue(const TimeOfDaySettings& settings);
+
+	// Weather-based settings
+	WeatherManager::WeatherSettings GetCurrentWeatherSettings();
+	
+	// Get effective settings (weather-based if available, fallback to ENB settings)
+	TimeOfDaySettings GetEffectiveBloomAmount();
+	TimeOfDaySettings GetEffectiveLensAmount();
 };
