@@ -32,7 +32,7 @@ void ENBEffect::UpdateEffectVariables()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto& runtimeData = imageSpaceManager->GetRuntimeData();
 	auto& baseData = runtimeData.data.baseData;
-	
+
 	auto& modAmount = runtimeData.data.modAmount;
 	auto& modData = runtimeData.data.modData;
 
@@ -52,7 +52,7 @@ void ENBEffect::UpdateEffectVariables()
 		modData.data[RE::ImageSpaceModData::kFadeG] * modAmount,
 		modData.data[RE::ImageSpaceModData::kFadeB] * modAmount,
 		modData.data[RE::ImageSpaceModData::kFadeAmount] * modAmount };
-	
+
 	params01[6] = { 1, 1, 1, 1 };
 
 	if (Params01 && Params01->IsValid())

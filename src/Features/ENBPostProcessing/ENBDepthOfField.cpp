@@ -64,7 +64,7 @@ void ENBDepthOfField::Execute()
 	}
 
 	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
-	
+
 	globals::d3d::context->CopyResource(textureHDRTemp->texture.Get(), textureOriginal2.texture.Get());
 
 	auto textureHDRTemp2 = effectManager.GetCommonTexture("TextureHDRTemp2");
