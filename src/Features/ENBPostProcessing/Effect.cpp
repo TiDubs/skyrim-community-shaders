@@ -293,7 +293,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	}
 }
 
-void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output)
+void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& output)
 {
 	if (!IsCompiled() || !effect) {
 		return;
@@ -309,12 +309,6 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, 
 	}
 
 	logger::debug("[ENBPP] Executing single technique '{}'", techniqueName);
-
-	// Set input texture
-	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
-	if (sourceTexture && sourceTexture->IsValid()) {
-		sourceTexture->SetResource(input.srv.Get());
-	}
 
 	// Set output render target
 	context->OMSetRenderTargets(1, output.rtv.GetAddressOf(), nullptr);

@@ -18,19 +18,14 @@ void ENBDepthOfField::Execute()
 		texturePrevious->SetResource(effectTextureCache[texturePreviousApertureName].srv.Get());
 	}
 
-	Texture nullInputTexture{};
-	nullInputTexture.texture = nullptr;
-	nullInputTexture.srv = nullptr;
-	nullInputTexture.rtv = nullptr;
-
-	ExecuteTechnique("Aperture", nullInputTexture, effectTextureCache[textureApertureName]);
+	ExecuteTechnique("Aperture", effectTextureCache[textureApertureName]);
 
 	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
 	if (textureAperture && textureAperture->IsValid()) {
 		textureAperture->SetResource(effectTextureCache[textureApertureName].srv.Get());
 	}
 
-	ExecuteTechnique("ReadFocus", nullInputTexture, effectTextureCache["TextureReadFocus"]);
+	ExecuteTechnique("ReadFocus", effectTextureCache["TextureReadFocus"]);
 
 	const std::string texturePreviousFocusName = (effectManager.textureSwap & 1) ? "TextureFocusSwap" : "TextureFocus";
 	const std::string textureFocusName = (effectManager.textureSwap & 1) ? "TextureFocus" : "TextureFocusSwap";
@@ -44,7 +39,7 @@ void ENBDepthOfField::Execute()
 		textureCurrent->SetResource(effectTextureCache["TextureReadFocus"].srv.Get());
 	}
 
-	ExecuteTechnique("Focus", nullInputTexture, effectTextureCache[textureFocusName]);
+	ExecuteTechnique("Focus", effectTextureCache[textureFocusName]);
 
 	auto textureFocus = effect->GetVariableByName("TextureFocus")->AsShaderResource();
 	if (textureFocus && textureFocus->IsValid()) {

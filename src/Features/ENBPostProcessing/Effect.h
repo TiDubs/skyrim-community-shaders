@@ -141,9 +141,9 @@ public:
 
 	// Execute a technique sequence with ping-pong rendering
 	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output, Texture& a_temp);
-
+	
 	// Execute a single technique
-	void ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output);
+	void ExecuteTechnique(const std::string& techniqueName, Texture& output);
 
 	// Allow EffectManager to setup common variables
 	ID3DX11Effect* GetEffect() const { return effect.Get(); }

@@ -6,11 +6,6 @@
 
 void ENBAdaptation::Execute()
 {
-	Texture nullInputTexture{};
-	nullInputTexture.texture = nullptr;
-	nullInputTexture.srv = nullptr;
-	nullInputTexture.rtv = nullptr;
-
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
@@ -21,7 +16,7 @@ void ENBAdaptation::Execute()
 		downsampledInput->SetResource(downsampler.GetMipLevel(sharedChain, adaptationMipLevel));
 	}
 
-	ExecuteTechnique("Downsample", nullInputTexture, effectTextureCache["TextureCurrent"]);
+	ExecuteTechnique("Downsample", effectTextureCache["TextureCurrent"]);
 
 	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (textureCurrent && textureCurrent->IsValid()) {
@@ -40,7 +35,7 @@ void ENBAdaptation::Execute()
 
 	// Execute adaptation technique, writing to output texture
 	auto* textureAdaptation = effectManager.GetCommonTexture(textureAdaptationName);
-	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);
+	ExecuteTechnique(GetSelectedTechnique(), *textureAdaptation);
 }
 
 void ENBAdaptation::UpdateEffectVariables()
