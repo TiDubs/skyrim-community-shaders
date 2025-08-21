@@ -92,7 +92,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 		// Weather file list
 		if (ImGui::TreeNodeEx("Weather Files", ImGuiTreeNodeFlags_DefaultOpen)) {
 			const auto& weatherEntries = weatherManager.GetWeatherEntries();
-			
+
 			if (!weatherEntries.empty()) {
 				if (ImGui::BeginChild("WeatherList", ImVec2(0, 200), true)) {
 					// Sort weather entries by name for consistent display
@@ -104,24 +104,25 @@ void ENBPostProcessingUI::RenderWeatherControl()
 
 					for (const auto& [key, entry] : sortedWeathers) {
 						ImGui::PushID(key.c_str());
-						
+
 						// Show weather file name and IDs
 						ImGui::Text("%s", entry->fileName.c_str());
 						ImGui::SameLine();
 						ImGui::Text("(%s)", key.c_str());
-						
+
 						// Show weather IDs on same line
 						ImGui::SameLine();
 						std::string idsText = "IDs: ";
 						for (size_t i = 0; i < entry->weatherIDs.size() && i < 3; ++i) {
-							if (i > 0) idsText += ", ";
+							if (i > 0)
+								idsText += ", ";
 							idsText += std::format("0x{:X}", entry->weatherIDs[i]);
 						}
 						if (entry->weatherIDs.size() > 3) {
 							idsText += "...";
 						}
 						ImGui::Text("%s", idsText.c_str());
-						
+
 						ImGui::PopID();
 					}
 				}
@@ -130,7 +131,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 				ImGui::Text("No weather files loaded");
 				ImGui::Text("Make sure _weatherlist.ini exists in enbseries folder");
 			}
-			
+
 			ImGui::TreePop();
 		}
 

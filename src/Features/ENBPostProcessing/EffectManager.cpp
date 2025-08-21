@@ -6,8 +6,6 @@
 #include "ENBEffectPostPass.h"
 #include "ENBEffectPrePass.h"
 #include "ENBLens.h"
-#include "Effect.h"
-#include "WeatherManager.h"
 #include "ENBPostProcessingUI.h"
 #include "ENBSettings.h"
 #include "Globals.h"
