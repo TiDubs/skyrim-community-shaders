@@ -511,20 +511,6 @@ void EffectManager::CreateCommonTextures()
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
-	// Create TextureBloom
-	{
-		Effect::Texture bloomTexture{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
-		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
-
-		Util::SetResourceName(bloomTexture.texture.Get(), "EffectManager::TextureBloom");
-		Util::SetResourceName(bloomTexture.rtv.Get(), "EffectManager::TextureBloom RTV");
-		Util::SetResourceName(bloomTexture.srv.Get(), "EffectManager::TextureBloom SRV");
-
-		commonTextureCache.insert({ "TextureBloom", bloomTexture });
-	}
-
 	// Create TextureHDRTemp
 	{
 		Effect::Texture textureColor{};
@@ -694,6 +680,37 @@ void EffectManager::CreateCommonTextures()
 		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureSDRTemp2 SRV");
 
 		commonTextureCache.insert({ "TextureSDRTemp2", textureColor });
+	}
+
+	texDesc.Width = 1024;
+	texDesc.Height = 1024;
+
+	// Create TextureBloom
+	{
+		Effect::Texture bloomTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
+
+		Util::SetResourceName(bloomTexture.texture.Get(), "EffectManager::TextureBloom");
+		Util::SetResourceName(bloomTexture.rtv.Get(), "EffectManager::TextureBloom RTV");
+		Util::SetResourceName(bloomTexture.srv.Get(), "EffectManager::TextureBloom SRV");
+
+		commonTextureCache.insert({ "TextureBloom", bloomTexture });
+	}
+
+	// Create TextureBloomTemp
+	{
+		Effect::Texture bloomTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
+
+		Util::SetResourceName(bloomTexture.texture.Get(), "EffectManager::TextureBloomTemp");
+		Util::SetResourceName(bloomTexture.rtv.Get(), "EffectManager::TextureBloomTemp RTV");
+		Util::SetResourceName(bloomTexture.srv.Get(), "EffectManager::TextureBloomTemp SRV");
+
+		commonTextureCache.insert({ "TextureBloomTemp", bloomTexture });
 	}
 
 	// Create 1x1 textures for adaptation
