@@ -27,18 +27,33 @@ void ENBEffect::UpdateEffectVariables()
 	auto Params01 = effect->GetVariableByName("Params01")->AsVector();
 	auto ENBParams01 = effect->GetVariableByName("ENBParams01")->AsVector();
 
-	float4 params01[7]{
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f },
-		{ 1.0f, 1.0f, 1.0f, 1.0f }
-	};
+	float4 params01[7]{};
 
-	params01[4].w = 0.0f;
-	params01[5].w = 0.0f;
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	auto& runtimeData = imageSpaceManager->GetRuntimeData();
+	auto& baseData = runtimeData.data.baseData;
+	
+	auto& modAmount = runtimeData.data.modAmount;
+	auto& modData = runtimeData.data.modData;
+
+	params01[2].x = baseData.hdr.receiveBloomThreshold;
+	params01[2].y = baseData.hdr.white * RE::GetINISetting("fReinhardWhiteScale:Display")->GetFloat();
+
+	params01[3].x = baseData.cinematic.saturation;
+	params01[3].z = baseData.cinematic.contrast;
+	params01[3].w = baseData.cinematic.brightness;
+
+	params01[4] = { baseData.tint.color.red,
+		baseData.tint.color.green,
+		baseData.tint.color.blue,
+		baseData.tint.amount };
+
+	params01[5] = { modData.data[RE::ImageSpaceModData::kFadeR] * modAmount,
+		modData.data[RE::ImageSpaceModData::kFadeG] * modAmount,
+		modData.data[RE::ImageSpaceModData::kFadeB] * modAmount,
+		modData.data[RE::ImageSpaceModData::kFadeAmount] * modAmount };
+	
+	params01[6] = { 1, 1, 1, 1 };
 
 	if (Params01 && Params01->IsValid())
 		Params01->SetRawValue(&params01, 0, sizeof(params01));
