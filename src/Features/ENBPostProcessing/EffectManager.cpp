@@ -201,26 +201,86 @@ void EffectManager::RenderImGui()
 			}
 
 			if (ImGui::TreeNodeEx("COLORCORRECTION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness, 0.0f, 3.0f, "%.2f");
-				ImGui::SliderFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve, 0.1f, 3.0f, "%.2f");
+				if (ImGui::BeginTable("colorcorrection_table", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("Brightness");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##Brightness", &enbSettings.COLORCORRECTION.Brightness, 0.0f, 3.0f, "%.2f");
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("GammaCurve");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve, 0.1f, 3.0f, "%.2f");
+
+					ImGui::EndTable();
+				}
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("ADAPTATION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity, 0.0f, 2.0f, "%.2f");
-				ImGui::Checkbox("ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
-				ImGui::SliderFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.0f, 1.0f, "%.2f");
-				ImGui::SliderFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.0f, 5.0f, "%.2f");
-				ImGui::SliderFloat("AdaptationTime", &enbSettings.ADAPTATION.AdaptationTime, 0.0f, 10.0f, "%.1f");
+				if (ImGui::BeginTable("adaptation_table", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("AdaptationSensitivity");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity, 0.0f, 2.0f, "%.2f");
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("ForceMinMaxValues");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Checkbox("##ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("AdaptationMin");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.0f, 1.0f, "%.2f");
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("AdaptationMax");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.0f, 5.0f, "%.2f");
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("AdaptationTime");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##AdaptationTime", &enbSettings.ADAPTATION.AdaptationTime, 0.0f, 10.0f, "%.1f");
+
+					ImGui::EndTable();
+				}
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("DEPTHOFFIELD", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime, 0.0f, 10.0f, "%.1f");
-				ImGui::SliderFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime, 0.0f, 10.0f, "%.1f");
+				if (ImGui::BeginTable("depthoffield_table", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("FocusingTime");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime, 0.0f, 10.0f, "%.1f");
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("ApertureTime");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::SliderFloat("##ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime, 0.0f, 10.0f, "%.1f");
+
+					ImGui::EndTable();
+				}
 				ImGui::TreePop();
 			}
 
@@ -845,9 +905,20 @@ void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDay
 {
 	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
 
-	for (const auto& timeOfDay : timeOfDayNames) {
-		std::string label = prefix + timeOfDay;
-		ImGui::SliderFloat(label.c_str(), &settings[timeOfDay], 0.0f, 10.0f, "%.1f");
+	if (ImGui::BeginTable((prefix + "_timeofday_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+		for (const auto& timeOfDay : timeOfDayNames) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", timeOfDay.c_str());
+			ImGui::TableSetColumnIndex(1);
+			std::string id = "##" + prefix + timeOfDay;
+			ImGui::SliderFloat(id.c_str(), &settings[timeOfDay], 0.0f, 10.0f, "%.1f");
+		}
+
+		ImGui::EndTable();
 	}
 }
 
