@@ -12,6 +12,7 @@
 #include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
+#include "WeatherManager.h"
 #include <d3dcompiler.h>
 #include <functional>
 
@@ -482,7 +483,7 @@ void EffectManager::UpdateCommonData()
 		auto stripPluginIndex = [](uint32_t formID) -> uint32_t {
 			return formID & 0x00FFFFFF;  // Keep only the lower 6 hex digits
 		};
-		
+
 		commonData.weather[0] = sky->currentWeather ? static_cast<float>(stripPluginIndex(sky->currentWeather->formID)) : 0;
 		commonData.weather[1] = sky->lastWeather ? static_cast<float>(stripPluginIndex(sky->lastWeather->formID)) : 0;
 		commonData.weather[2] = sky->currentWeatherPct;
@@ -826,22 +827,20 @@ float EffectManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings)
 	auto& weatherManager = WeatherManager::GetSingleton();
 	return weatherManager.ComputeTimeOfDayValue(
 		WeatherManager::TimeOfDaySettings{
-			settings.Dawn, settings.Sunrise, settings.Day, 
-			settings.Sunset, settings.Dusk, settings.Night, 1.0f, 1.0f
-		}, 
-		commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor
-	);
+			settings.Dawn, settings.Sunrise, settings.Day,
+			settings.Sunset, settings.Dusk, settings.Night, 1.0f, 1.0f },
+		commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
 }
 
 WeatherManager::WeatherSettings EffectManager::GetCurrentWeatherSettings()
 {
 	auto& weatherManager = WeatherManager::GetSingleton();
-	
+
 	// Get current weather IDs from commonData
 	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
 	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
 	float blendFactor = commonData.weather[2];
-	
+
 	return weatherManager.GetInterpolatedSettings(currentWeatherID, lastWeatherID, blendFactor);
 }
 
@@ -849,13 +848,13 @@ EffectManager::TimeOfDaySettings EffectManager::GetEffectiveBloomAmount()
 {
 	auto weatherSettings = GetCurrentWeatherSettings();
 	auto& weatherManager = WeatherManager::GetSingleton();
-	
+
 	// Check if we have valid weather settings
 	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
 	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
-	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
-		                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-	
+	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
+	                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+
 	if (hasWeatherSettings) {
 		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
 		TimeOfDaySettings result;
@@ -867,7 +866,7 @@ EffectManager::TimeOfDaySettings EffectManager::GetEffectiveBloomAmount()
 		result.Night = weatherSettings.BLOOM.Amount.Night;
 		return result;
 	}
-	
+
 	// Fallback to ENB settings
 	return enbSettings.BLOOM.Amount;
 }
@@ -876,14 +875,13 @@ EffectManager::TimeOfDaySettings EffectManager::GetEffectiveLensAmount()
 {
 	auto weatherSettings = GetCurrentWeatherSettings();
 	auto& weatherManager = WeatherManager::GetSingleton();
-	
+
 	// Check if we have valid weather settings
 	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
 	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
-	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
-		                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-	
-	
+	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
+	                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+
 	if (hasWeatherSettings) {
 		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
 		TimeOfDaySettings result;
@@ -895,7 +893,7 @@ EffectManager::TimeOfDaySettings EffectManager::GetEffectiveLensAmount()
 		result.Night = weatherSettings.LENS.Amount.Night;
 		return result;
 	}
-	
+
 	// Fallback to ENB settings
 	return enbSettings.LENS.Amount;
 }
