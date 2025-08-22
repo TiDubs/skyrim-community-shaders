@@ -3,8 +3,8 @@
 #include "State.h"
 
 #include "SettingsManager.h"
-#include "WeatherManager.h"
 #include "TextureManager.h"
+#include "WeatherManager.h"
 
 #include <d3dcompiler.h>
 

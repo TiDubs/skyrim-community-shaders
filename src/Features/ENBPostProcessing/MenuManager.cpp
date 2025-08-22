@@ -1,7 +1,7 @@
 ﻿#include "MenuManager.h"
 
-#include "SettingsManager.h"
 #include "EffectManager.h"
+#include "SettingsManager.h"
 
 MenuManager& MenuManager::GetSingleton()
 {

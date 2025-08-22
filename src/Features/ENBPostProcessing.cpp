@@ -1,8 +1,8 @@
 #include "ENBPostProcessing.h"
 
+#include "ENBPostProcessing/EffectManager.h"
 #include "ENBPostProcessing/MenuManager.h"
 #include "ENBPostProcessing/SettingsManager.h"
-#include "ENBPostProcessing/EffectManager.h"
 
 void ENBPostProcessing::SaveSettings(json&)
 {
