@@ -94,13 +94,13 @@ public:
 
 	// Downsampling support
 	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
-	const Downsampler::DownsampleChain& GetSharedDownsampleChain() const { return sharedDownsampleChain; }
+	const Downsampler::FixedDownsampleTexture& GetSharedDownsampleTexture() const { return sharedDownsampleTexture; }
 
 	// Common texture access
 
 	const std::unordered_map<std::string, Effect::Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
-	Downsampler::DownsampleChain sharedDownsampleChain;
+	Downsampler::FixedDownsampleTexture sharedDownsampleTexture;
 
 	// Texture swap tracking
 	uint32_t textureSwap = 0;

@@ -19,43 +19,35 @@ class Downsampler
 public:
 	static Downsampler& GetSingleton();
 
-	struct DownsampleChain
+	struct FixedDownsampleTexture
 	{
 		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11ShaderResourceView> srv;
-		ComPtr<ID3D11ShaderResourceView> fullChainSRV;  // SRV for all mip levels (used for GenerateMips)
-		UINT baseWidth;
-		UINT baseHeight;
-		UINT targetWidth;
-		UINT targetHeight;
-		UINT targetMipLevel;
-		UINT totalMipLevels;
-		DXGI_FORMAT format;
+		ComPtr<ID3D11ShaderResourceView> srvChain;  // Mip 0 -> Mip 1 -> Mip2
+		ComPtr<ID3D11ShaderResourceView> srv;  // Mip 0: 1024x1024
+		ComPtr<ID3D11ShaderResourceView> srvBlurry;   // Mip 2: 256x256
+		ComPtr<ID3D11RenderTargetView> rtv;
 	};
 
 	// Initialize the downsampler with shared resources
 	void Initialize();
 
-	// Create a downsample chain to achieve target resolution (finds nearest mip level by pixel count)
-	DownsampleChain CreateDownsampleChain(UINT baseWidth, UINT baseHeight, UINT targetWidth, UINT targetHeight, DXGI_FORMAT format);
+	// Create fixed 1024x1024 texture with 3 mips (1024, 512, 256)
+	FixedDownsampleTexture CreateFixedDownsampleTexture(DXGI_FORMAT format);
 
-	// Perform downsampling using GenerateMips
-	void Downsample(ID3D11ShaderResourceView* source, DownsampleChain& chain);
+	// Perform downsampling using custom shader
+	void DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture);
 
-	// Get the target resolution level from the chain
-	ID3D11ShaderResourceView* GetTargetLevel(const DownsampleChain& chain) const;
-
-	// Get a specific mip level from the chain
-	ID3D11ShaderResourceView* GetMipLevel(const DownsampleChain& chain, UINT mipLevel) const;
-
-	// Find the best mip level for a target resolution
-	UINT FindBestMipLevel(const DownsampleChain& chain, UINT targetWidth, UINT targetHeight) const;
+	ID3D11ShaderResourceView* GetTexture(const FixedDownsampleTexture& texture) const;
+	ID3D11ShaderResourceView* GetTextureBlurry(const FixedDownsampleTexture& texture) const;
 
 private:
-	// Helper methods
-	UINT CalculateMipLevels(UINT width, UINT height) const;
-	UINT FindNearestMipLevel(UINT baseWidth, UINT baseHeight, UINT targetWidth, UINT targetHeight) const;
+	// Compile the downsample shaders
+	bool CompileShaders();
+	
+	// Shader source strings
+	static const char* GetDownsamplePixelShaderSource();
 
-	// Cache of SRVs for different mip levels
-	mutable std::unordered_map<UINT, ComPtr<ID3D11ShaderResourceView>> mipLevelSRVs;
+	// Compiled shader objects
+	ComPtr<ID3D11PixelShader> downsamplePS;
+	ComPtr<ID3D11SamplerState> m_linearSampler;
 };

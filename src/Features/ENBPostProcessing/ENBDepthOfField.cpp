@@ -2,7 +2,6 @@
 #include "EffectManager.h"
 #include "Globals.h"
 #include "Utils/D3D.h"
-#include <imgui.h>
 
 void ENBDepthOfField::Execute()
 {
@@ -43,7 +42,7 @@ void ENBDepthOfField::Execute()
 
 	auto textureFocus = effect->GetVariableByName("TextureFocus")->AsShaderResource();
 	if (textureFocus && textureFocus->IsValid()) {
-		textureFocus->SetResource(effectTextureCache["TextureFocus"].srv.Get());
+		textureFocus->SetResource(effectTextureCache[textureFocusName].srv.Get());
 	}
 
 	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -74,8 +73,11 @@ void ENBDepthOfField::UpdateEffectVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	float4 dofParameters{};
-	dofParameters.z = effectManager.GetSetting<float>("ApertureTime", "DEPTHOFFIELD") * (*globals::game::deltaTime);
-	dofParameters.w = effectManager.GetSetting<float>("FocusingTime", "DEPTHOFFIELD") * (*globals::game::deltaTime);
+
+	float delta = (*globals::game::deltaTime);
+
+	dofParameters.z = delta / effectManager.GetSetting<float>("ApertureTime", "DEPTHOFFIELD");
+	dofParameters.w = delta / effectManager.GetSetting<float>("FocusingTime", "DEPTHOFFIELD");
 
 	auto DofParameters = effect->GetVariableByName("DofParameters")->AsVector();
 	if (DofParameters && DofParameters->IsValid())

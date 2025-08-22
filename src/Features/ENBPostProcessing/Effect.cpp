@@ -216,7 +216,8 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
-	bool useTemp = false;  // Track which texture to use for ping-ponging between output and temp
+	uint32_t swapCounter = 0;  // Track swap count for ping-ponging between output and temp
+	bool targetInOutput = false;
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
@@ -234,27 +235,37 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 			// Single technique: input -> output
 			inputSRV = a_input.srv.Get();
 			outputRTV = a_output.rtv.Get();
-		} else if (i == 0) {
+			if (techniqueInfo.renderTargetName.empty())
+				targetInOutput = true;
+		} else if (swapCounter == 0) {
 			// First pass: input -> output (start the ping-pong with output)
 			inputSRV = a_input.srv.Get();
 			outputRTV = a_output.rtv.Get();
+			if (techniqueInfo.renderTargetName.empty())
+				targetInOutput = true;
 		} else {
 			// Subsequent passes: ping-pong between output and temp
+			bool useTemp = (swapCounter & 1) == 0;  // Use counter LSB for swap determination
 			if (useTemp) {
 				// Read from temp, write to output
 				inputSRV = a_temp.srv.Get();
 				outputRTV = a_output.rtv.Get();
+				if (techniqueInfo.renderTargetName.empty())
+					targetInOutput = true;
 			} else {
 				// Read from output, write to temp
 				inputSRV = a_output.srv.Get();
 				outputRTV = a_temp.rtv.Get();
+				if (techniqueInfo.renderTargetName.empty())
+					targetInOutput = false;
 			}
-			useTemp = !useTemp;  // Toggle for next iteration
 		}
 
 		// Handle custom render target if specified
 		if (!techniqueInfo.renderTargetName.empty()) {
 			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, outputRTV);
+		} else {
+			swapCounter++;  // Increment counter for next iteration
 		}
 
 		if (sourceTexture && sourceTexture->IsValid()) {
@@ -286,11 +297,9 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		}
 	}
 
-	// Ensure final result is in output
-	if (sequence.size() > 1 && useTemp) {
-		// If we ended with writing to temp, copy temp back to output
+	if (!targetInOutput) {
 		context->CopyResource(a_output.texture.Get(), a_temp.texture.Get());
-	}
+	}	
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& output)

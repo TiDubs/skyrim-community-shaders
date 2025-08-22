@@ -8,12 +8,12 @@ void ENBAdaptation::Execute()
 {
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedChain = effectManager.GetSharedDownsampleChain();
+	auto& sharedTexture = effectManager.GetSharedDownsampleTexture();
 
 	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid()) {
-		UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 256, 256);
-		downsampledInput->SetResource(downsampler.GetMipLevel(sharedChain, adaptationMipLevel));
+		// Use 256x256 mip for adaptation
+		downsampledInput->SetResource(downsampler.GetTextureBlurry(sharedTexture));
 	}
 
 	ExecuteTechnique("Downsample", effectTextureCache["TextureCurrent"]);
@@ -42,11 +42,15 @@ void ENBAdaptation::UpdateEffectVariables()
 {
 	auto& effectManager = EffectManager::GetSingleton();
 
+	auto forceMinMaxValues = effectManager.GetSetting<bool>("ForceMinMaxValues", "ADAPTATION");
+	
+	float delta = (*globals::game::deltaTime);
+
 	float4 adaptationParameters{};
-	adaptationParameters.x = effectManager.GetSetting<float>("AdaptationMin", "ADAPTATION");
-	adaptationParameters.y = effectManager.GetSetting<float>("AdaptationMax", "ADAPTATION");
+	adaptationParameters.x = !forceMinMaxValues ? 0.0f : effectManager.GetSetting<float>("AdaptationMin", "ADAPTATION") ;
+	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : effectManager.GetSetting<float>("AdaptationMax", "ADAPTATION");
 	adaptationParameters.z = effectManager.GetSetting<float>("AdaptationSensitivity", "ADAPTATION");
-	adaptationParameters.w = effectManager.GetSetting<float>("AdaptationTime", "ADAPTATION") * (*globals::game::deltaTime);
+	adaptationParameters.w = delta / effectManager.GetSetting<float>("AdaptationTime", "ADAPTATION");
 
 	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
 	if (AdaptationParameters && AdaptationParameters->IsValid())

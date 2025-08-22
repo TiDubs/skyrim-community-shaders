@@ -93,12 +93,6 @@ void EffectManager::ExecuteEffects()
 
 	UpdateCommonData();
 
-	// Apply brightness and gamma curve
-	ApplyColorCorrection(textureOriginal.UAV);
-
-	// Perform shared downsampling once
-	Downsampler::GetSingleton().Downsample(textureOriginal.SRV, sharedDownsampleChain);
-
 	// Backup current render state
 	ComPtr<ID3D11RasterizerState> previousRS;
 	ComPtr<ID3D11BlendState> previousBS;
@@ -131,6 +125,12 @@ void EffectManager::ExecuteEffects()
 	context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	context->IASetInputLayout(inputLayout.Get());
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	// Apply brightness and gamma curve
+	ApplyColorCorrection(textureOriginal.UAV);
+
+	// Perform shared downsampling once
+	Downsampler::GetSingleton().DownsampleToFixed(textureOriginal.SRV, sharedDownsampleTexture);
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
@@ -194,13 +194,8 @@ void EffectManager::CreateCommonResources()
 	// Initialize downsampler and create shared downsample chain
 	Downsampler::GetSingleton().Initialize();
 
-	auto state = globals::state;
-	UINT screenWidth = static_cast<UINT>(state->screenSize.x);
-	UINT screenHeight = static_cast<UINT>(state->screenSize.y);
-
-	// Create shared downsample chain that goes down to 1x1
-	sharedDownsampleChain = Downsampler::GetSingleton().CreateDownsampleChain(
-		screenWidth, screenHeight, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
+	// Create shared fixed downsample texture (1024x1024 with 3 mips: 1024, 512, 256)
+	sharedDownsampleTexture = Downsampler::GetSingleton().CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void EffectManager::CreateQuadGeometry()
@@ -460,14 +455,20 @@ void EffectManager::UpdateCommonData()
 
 	// Update timer
 	{
-		auto modifiedTimer = (1000.0f * state->timer);
-		modifiedTimer = std::fmodf(modifiedTimer, 16777216);
+		static double timer = 0.0f;
+		timer += *globals::game::deltaTime;
+
+		static uint frameCount = 0;
+
+		auto modifiedTimer = std::fmodf(static_cast<float>(timer * 1000.0), 16777216);
 		modifiedTimer /= 16777216.0f;
 
 		commonData.timer[0] = modifiedTimer;
 		commonData.timer[1] = 60.0f;
-		commonData.timer[2] = 0.0f;
-		commonData.timer[3] = *globals::game::deltaTime;
+		commonData.timer[2] = static_cast<float>(frameCount % 9999);
+		commonData.timer[3] = *globals::game::deltaTime * 1000.0f;
+
+		frameCount++;
 	}
 
 	// Update screen size

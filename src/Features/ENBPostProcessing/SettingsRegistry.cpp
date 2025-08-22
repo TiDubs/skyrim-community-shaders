@@ -61,7 +61,7 @@ void SettingsRegistry::RegisterTimeOfDaySetting(const std::string& key, const st
 }
 
 template <typename T>
-T SettingsRegistry::GetValue(const std::string& key, const std::string& category)
+T SettingsRegistry::GetValue(const std::string& key, const std::string& category, bool rawValue)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	auto it = settings.find(compositeKey);
@@ -134,6 +134,11 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 				}
 			}
 
+			// Return with no interpolation
+			if (rawValue){
+				return std::get<T>(weatherBlendFactor > 0.5f ? currentWeatherValue : lastWeatherValue);
+			}
+
 			// Interpolate between weather values
 			SettingValue blendedValue = InterpolateWeatherValues(currentWeatherValue, lastWeatherValue, weatherBlendFactor);
 			return std::get<T>(blendedValue);
@@ -154,21 +159,65 @@ void SettingsRegistry::SetValue(const std::string& key, const std::string& categ
 		return;
 	}
 
-	// Update the base setting value
-	it->second->currentValue = value;
+	const auto& setting = *it->second;
 
-	// If this setting has weather support and we have a current weather, update the weather setting too
-	if (it->second->hasWeatherSupport && currentWeatherID != 0) {
-		std::ostringstream oss;
-		oss << "weather_" << currentWeatherID;
-		std::string weatherKey = oss.str();
+	// If setting has weather support, use the same logic as GetValue to determine what to update
+	if (setting.hasWeatherSupport) {
+		// Check ignore weather system settings
+		bool shouldIgnoreWeather = false;
 
-		// Update the weather-specific value
-		weatherSettings[weatherKey][compositeKey] = value;
+		// Check if we should ignore weather system based on interior state
+		auto ignoreWeatherIt = ignoreWeatherSystem.find(setting.category);
+		auto ignoreWeatherInteriorIt = ignoreWeatherSystemInterior.find(setting.category);
 
-		logger::debug("[SettingsRegistry] Updated weather setting [{}]::{} for weather {}",
-			category, key, currentWeatherID);
+		if (interiorFactor > 0.5f) {
+			// We're in an interior
+			if (ignoreWeatherInteriorIt != ignoreWeatherSystemInterior.end() && ignoreWeatherInteriorIt->second) {
+				shouldIgnoreWeather = true;
+			}
+		} else {
+			// We're in an exterior
+			if (ignoreWeatherIt != ignoreWeatherSystem.end() && ignoreWeatherIt->second) {
+				shouldIgnoreWeather = true;
+			}
+		}
+
+		// If ignore is set, update base setting value (same as GetValue logic)
+		if (shouldIgnoreWeather) {
+			it->second->currentValue = value;
+			logger::debug("[SettingsRegistry] Updated base setting [{}]::{} (weather ignored)", category, key);
+			return;
+		}
+
+		auto& weatherManager = WeatherManager::GetSingleton();
+
+		// Check if we have weather settings for current weather
+		auto currentWeatherEntry = weatherManager.FindWeatherEntry(currentWeatherID);
+		auto lastWeatherEntry = weatherManager.FindWeatherEntry(lastWeatherID);
+
+		if (currentWeatherEntry || lastWeatherEntry) {
+			// Determine which weather to update based on blend factor (same logic as GetValue)
+			uint32_t targetWeatherID = (weatherBlendFactor > 0.5f) ? currentWeatherID : lastWeatherID;
+			auto targetWeatherEntry = (weatherBlendFactor > 0.5f) ? currentWeatherEntry : lastWeatherEntry;
+
+			if (targetWeatherEntry) {
+				std::ostringstream oss;
+				oss << "weather_" << targetWeatherID;
+				std::string weatherKey = oss.str();
+
+				// Update the weather-specific value
+				weatherSettings[weatherKey][compositeKey] = value;
+
+				logger::debug("[SettingsRegistry] Updated weather setting [{}]::{} for weather {} (blend: {:.2f})",
+					category, key, targetWeatherID, weatherBlendFactor);
+				return;
+			}
+		}
 	}
+
+	// Update the base setting value (fallback or non-weather setting)
+	it->second->currentValue = value;
+	logger::debug("[SettingsRegistry] Updated base setting [{}]::{}", category, key);
 }
 
 float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key)
@@ -663,9 +712,9 @@ void SettingsRegistry::SetIgnoreWeatherSystemInterior(const std::string& categor
 }
 
 // Explicit template instantiations
-template bool SettingsRegistry::GetValue<bool>(const std::string& key, const std::string& category);
-template float SettingsRegistry::GetValue<float>(const std::string& key, const std::string& category);
-template TimeOfDayValue SettingsRegistry::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category);
+template bool SettingsRegistry::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
+template float SettingsRegistry::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
+template TimeOfDayValue SettingsRegistry::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
 
 template void SettingsRegistry::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
 template void SettingsRegistry::SetValue<float>(const std::string& key, const std::string& category, const float& value);

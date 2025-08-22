@@ -11,18 +11,24 @@ void ENBBloom::Execute()
 
 	auto textureHDRTemp = effectManager.GetCommonTexture("TextureBloomLensTemp");
 	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
+	
+	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
+	auto& downsampler = effectManager.GetDownsampler();
+	auto& sharedTexture = effectManager.GetSharedDownsampleTexture();
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureHDRTemp, *textureBloom, *textureHDRTemp);
+	Texture downsampledInput{};
+	downsampledInput.srv = downsampler.GetTexture(sharedTexture);
+
+	ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInput, *textureBloom, *textureHDRTemp);
 }
 
 void ENBBloom::UpdateEffectVariables()
 {
-	// Set dowsampled texture, typically the one used
+	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
-	SetShaderResourceVariable("TextureDownsampled", downsampler.GetMipLevel(sharedChain, bloomMipLevel));
+	auto& sharedTexture = effectManager.GetSharedDownsampleTexture();
+	SetShaderResourceVariable("TextureDownsampled", downsampler.GetTexture(sharedTexture));
 
 	// Set original texture, not typically used due to aliasing
 	SetShaderResourceVariable("TextureOriginal", globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRV);

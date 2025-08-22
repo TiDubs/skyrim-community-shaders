@@ -3,6 +3,7 @@
 #include "Utils/D3D.h"
 #include <algorithm>
 #include <cmath>
+#include <d3dcompiler.h>
 
 Downsampler& Downsampler::GetSingleton()
 {
@@ -12,29 +13,23 @@ Downsampler& Downsampler::GetSingleton()
 
 void Downsampler::Initialize()
 {
-	logger::info("[ENBPP] Downsampler initialized");
+	if (!CompileShaders()) {
+		logger::error("[ENBPP] Failed to compile downsampler shaders");
+		return;
+	}
+	logger::info("[ENBPP] Downsampler initialized with custom shaders");
 }
 
-Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, UINT baseHeight, UINT targetWidth, UINT targetHeight, DXGI_FORMAT format)
+Downsampler::FixedDownsampleTexture Downsampler::CreateFixedDownsampleTexture(DXGI_FORMAT format)
 {
 	auto device = globals::d3d::device;
-	DownsampleChain chain;
+	FixedDownsampleTexture fixedTexture;
 
-	// Calculate total mip levels possible
-	UINT totalMipLevels = CalculateMipLevels(baseWidth, baseHeight);
-
-	// Find the mip level that gives us the closest resolution to target by pixel count
-	UINT targetMipLevel = FindNearestMipLevel(baseWidth, baseHeight, targetWidth, targetHeight);
-
-	// Calculate actual target resolution at the chosen mip level
-	UINT actualTargetWidth = std::max(1U, baseWidth >> targetMipLevel);
-	UINT actualTargetHeight = std::max(1U, baseHeight >> targetMipLevel);
-
-	// Create texture with full mip chain
+	// Create 1024x1024 texture with 3 mip levels (1024, 512, 256)
 	D3D11_TEXTURE2D_DESC texDesc = {};
-	texDesc.Width = baseWidth;
-	texDesc.Height = baseHeight;
-	texDesc.MipLevels = totalMipLevels;
+	texDesc.Width = 1024;
+	texDesc.Height = 1024;
+	texDesc.MipLevels = 3;  // 1024, 512, 256
 	texDesc.ArraySize = 1;
 	texDesc.Format = format;
 	texDesc.SampleDesc.Count = 1;
@@ -44,148 +39,252 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
-	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, chain.texture.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.GetAddressOf()));
 
-	// Create SRV for all mip levels (used for GenerateMips)
-	D3D11_SHADER_RESOURCE_VIEW_DESC fullChainSrvDesc = {};
-	fullChainSrvDesc.Format = format;
-	fullChainSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	fullChainSrvDesc.Texture2D.MostDetailedMip = 0;
-	fullChainSrvDesc.Texture2D.MipLevels = totalMipLevels;
+	// Create RTV for mip 0 (1024x1024)
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.Format = format;
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Texture2D.MipSlice = 0;
 
-	DX::ThrowIfFailed(device->CreateShaderResourceView(chain.texture.Get(), &fullChainSrvDesc, chain.fullChainSRV.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.Get(), &rtvDesc, fixedTexture.rtv.GetAddressOf()));
 
-	// Create SRV for the specific mip level we want
+	// Create SRVs for each mip level
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Format = format;
 	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = targetMipLevel;
+	srvDesc.Texture2D.MipLevels = 3;
+
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvChain.GetAddressOf()));
+
 	srvDesc.Texture2D.MipLevels = 1;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srv.GetAddressOf()));
 
-	DX::ThrowIfFailed(device->CreateShaderResourceView(chain.texture.Get(), &srvDesc, chain.srv.GetAddressOf()));
+	srvDesc.Texture2D.MostDetailedMip = 2;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvBlurry.GetAddressOf()));
 
-	Util::SetResourceName(chain.texture.Get(), "Downsampler::DownsampleChain (%ux%u)", baseWidth, baseHeight);
-	Util::SetResourceName(chain.fullChainSRV.Get(), "Downsampler::DownsampleChain FullChain SRV (%ux%u)", baseWidth, baseHeight);
-	Util::SetResourceName(chain.srv.Get(), "Downsampler::DownsampleChain SRV (%ux%u) Mip%u", baseWidth, baseHeight, targetMipLevel);
+	// Set debug names
+	Util::SetResourceName(fixedTexture.texture.Get(), "Downsampler::FixedTexture (1024x1024, 3 mips)");
+	Util::SetResourceName(fixedTexture.rtv.Get(), "Downsampler::FixedTexture RTV");
+	Util::SetResourceName(fixedTexture.srvChain.Get(), "Downsampler::FixedTexture SRV Chain");
+	Util::SetResourceName(fixedTexture.srv.Get(), "Downsampler::FixedTexture SRV 1024x1024");
+	Util::SetResourceName(fixedTexture.srvBlurry.Get(), "Downsampler::FixedTexture SRV 256x256");
 
-	// Store chain properties
-	chain.baseWidth = baseWidth;
-	chain.baseHeight = baseHeight;
-	chain.targetWidth = actualTargetWidth;
-	chain.targetHeight = actualTargetHeight;
-	chain.targetMipLevel = targetMipLevel;
-	chain.totalMipLevels = totalMipLevels;
-	chain.format = format;
+	logger::info("[ENBPP] Created fixed downsample texture: 1024x1024 with 3 mips (1024, 512, 256)");
 
-	logger::info("[ENBPP] Created downsample chain: {}x{} -> {}x{} (mip level {}/{})",
-		baseWidth, baseHeight,
-		actualTargetWidth, actualTargetHeight,
-		targetMipLevel, totalMipLevels - 1);
-
-	return chain;
+	return fixedTexture;
 }
 
-void Downsampler::Downsample(ID3D11ShaderResourceView* source, DownsampleChain& chain)
+void Downsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture)
 {
 	auto context = globals::d3d::context;
 
-	// Copy source to mip level 0 of our chain texture
+	// Get source texture dimensions
 	ComPtr<ID3D11Resource> sourceResource;
-	source->GetResource(sourceResource.GetAddressOf());
+	source->GetResource(&sourceResource);
+	ComPtr<ID3D11Texture2D> sourceTexture;
+	sourceResource.As(&sourceTexture);
+	D3D11_TEXTURE2D_DESC sourceDesc;
+	sourceTexture->GetDesc(&sourceDesc);
 
-	context->CopySubresourceRegion(
-		chain.texture.Get(), 0,   // dest texture, mip 0
-		0, 0, 0,                  // dest x, y, z
-		sourceResource.Get(), 0,  // source texture, mip 0
-		nullptr                   // copy entire resource
-	);
+	// Calculate source texel size for the shader
+	float sourceTexelSizeX = 1.0f / static_cast<float>(sourceDesc.Width);
+	float sourceTexelSizeY = 1.0f / static_cast<float>(sourceDesc.Height);
 
-	// Generate mips automatically using the full chain SRV
-	context->GenerateMips(chain.fullChainSRV.Get());
-}
+	// Update constant buffer with source texel size
+	struct DownsampleConstants
+	{
+		float sourceTexelSize[2];  // x = 1/width, y = 1/height
+		float padding[2];          // padding to 16-byte alignment
+	} constants;
 
-ID3D11ShaderResourceView* Downsampler::GetTargetLevel(const DownsampleChain& chain) const
-{
-	return chain.srv.Get();
-}
+	constants.sourceTexelSize[0] = sourceTexelSizeX;
+	constants.sourceTexelSize[1] = sourceTexelSizeY;
+	constants.padding[0] = 0.0f;
+	constants.padding[1] = 0.0f;
 
-ID3D11ShaderResourceView* Downsampler::GetMipLevel(const DownsampleChain& chain, UINT mipLevel) const
-{
-	if (mipLevel >= chain.totalMipLevels) {
-		return nullptr;
-	}
+	// Create and update constant buffer (simple approach for now)
+	D3D11_BUFFER_DESC cbDesc = {};
+	cbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	cbDesc.ByteWidth = sizeof(constants);
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
-	// Check cache first
-	auto it = mipLevelSRVs.find(mipLevel);
-	if (it != mipLevelSRVs.end()) {
-		return it->second.Get();
-	}
+	D3D11_SUBRESOURCE_DATA cbData = {};
+	cbData.pSysMem = &constants;
 
-	// Create SRV for this mip level
+	ComPtr<ID3D11Buffer> constantBuffer;
 	auto device = globals::d3d::device;
-	ComPtr<ID3D11ShaderResourceView> srv;
+	device->CreateBuffer(&cbDesc, &cbData, &constantBuffer);
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Format = chain.format;
-	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = mipLevel;
-	srvDesc.Texture2D.MipLevels = 1;
+	// Set render target to the 1024x1024 mip level 0
+	context->OMSetRenderTargets(1, texture.rtv.GetAddressOf(), nullptr);
 
-	HRESULT hr = device->CreateShaderResourceView(chain.texture.Get(), &srvDesc, srv.GetAddressOf());
-	if (SUCCEEDED(hr)) {
-		mipLevelSRVs[mipLevel] = srv;
-		return srv.Get();
-	}
+	// Set viewport to 1024x1024
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = 1024.0f;
+	viewport.Height = 1024.0f;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
 
-	return nullptr;
+	// Set shaders and resources
+	context->PSSetShader(downsamplePS.Get(), nullptr, 0);
+	context->PSSetConstantBuffers(0, 1, constantBuffer.GetAddressOf());
+	context->PSSetShaderResources(0, 1, &source);
+	context->PSSetSamplers(0, 1, m_linearSampler.GetAddressOf());
+
+	// Draw fullscreen quad
+	context->Draw(4, 0);
+
+	// Clear bindings before GenerateMips
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	ID3D11Buffer* nullCB = nullptr;
+	context->PSSetShaderResources(0, 1, &nullSRV);
+	context->PSSetConstantBuffers(0, 1, &nullCB);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	// Generate mips for the remaining levels (512, 256)
+	context->GenerateMips(texture.srvChain.Get());
 }
 
-UINT Downsampler::FindBestMipLevel(const DownsampleChain& chain, UINT targetWidth, UINT targetHeight) const
+ID3D11ShaderResourceView* Downsampler::GetTexture(const FixedDownsampleTexture& texture) const
 {
-	return FindNearestMipLevel(chain.baseWidth, chain.baseHeight, targetWidth, targetHeight);
+	return texture.srv.Get();
 }
 
-UINT Downsampler::CalculateMipLevels(UINT width, UINT height) const
+ID3D11ShaderResourceView* Downsampler::GetTextureBlurry(const FixedDownsampleTexture& texture) const
 {
-	UINT levels = 1;
-	while (width > 1 || height > 1) {
-		width = std::max(1U, width / 2);
-		height = std::max(1U, height / 2);
-		levels++;
-	}
-	return levels;
+	return texture.srvBlurry.Get();
 }
 
-UINT Downsampler::FindNearestMipLevel(UINT baseWidth, UINT baseHeight, UINT targetWidth, UINT targetHeight) const
+bool Downsampler::CompileShaders()
 {
-	UINT targetPixelCount = targetWidth * targetHeight;
-	UINT bestMipLevel = 0;
-	UINT bestPixelDiff = UINT_MAX;
+	auto device = globals::d3d::device;
 
-	UINT currentWidth = baseWidth;
-	UINT currentHeight = baseHeight;
-	UINT mipLevel = 0;
+	// Compile pixel shader
+	ComPtr<ID3DBlob> psBlob;
+	ComPtr<ID3DBlob> errorBlob;
 
-	while (currentWidth >= 1 && currentHeight >= 1) {
-		UINT currentPixelCount = currentWidth * currentHeight;
-		UINT pixelDiff = (currentPixelCount > targetPixelCount) ?
-		                     (currentPixelCount - targetPixelCount) :
-		                     (targetPixelCount - currentPixelCount);
+	auto hr = D3DCompile(
+		GetDownsamplePixelShaderSource(),
+		strlen(GetDownsamplePixelShaderSource()),
+		nullptr,
+		nullptr,
+		nullptr,
+		"main",
+		"ps_5_0",
+		0,
+		0,
+		&psBlob,
+		&errorBlob);
 
-		if (pixelDiff < bestPixelDiff) {
-			bestPixelDiff = pixelDiff;
-			bestMipLevel = mipLevel;
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("[ENBPP] Pixel shader compilation failed: {}", 
+				static_cast<const char*>(errorBlob->GetBufferPointer()));
 		}
-
-		// If we've found an exact match or gone below target, we can stop
-		if (currentPixelCount <= targetPixelCount) {
-			break;
-		}
-
-		currentWidth = std::max(1U, currentWidth / 2);
-		currentHeight = std::max(1U, currentHeight / 2);
-		mipLevel++;
+		return false;
 	}
 
-	return bestMipLevel;
+	hr = device->CreatePixelShader(
+		psBlob->GetBufferPointer(),
+		psBlob->GetBufferSize(),
+		nullptr,
+		&downsamplePS);
+
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create pixel shader");
+		return false;
+	}
+
+	// Create linear sampler state
+	D3D11_SAMPLER_DESC samplerDesc = {};
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	samplerDesc.MinLOD = 0;
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+	hr = device->CreateSamplerState(&samplerDesc, &m_linearSampler);
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create sampler state");
+		return false;
+	}
+
+	logger::info("[ENBPP] Successfully compiled downsampler shader and created resources");
+	return true;
+}
+
+const char* Downsampler::GetDownsamplePixelShaderSource()
+{
+	return R"HLSL(
+Texture2D<float4> InputTexture : register(t0);
+SamplerState LinearSampler : register(s0);
+
+cbuffer DownsampleConstants : register(b0)
+{
+    float2 SourceTexelSize;  // x = 1/width, y = 1/height of source texture
+    float2 Padding;
+};
+
+struct PSInput
+{
+    float4 position : SV_POSITION;
+    float2 texcoord : TEXCOORD0;
+};
+
+// Color luminance calculation
+namespace Color
+{
+    float RGBToLuminance(float3 rgb)
+    {
+        return dot(rgb, float3(0.2126, 0.7152, 0.0722));
+    }
+}
+
+float4 KarisAverage(float4 a, float4 b, float4 c, float4 d)
+{
+    float wa = rcp(1.0 + Color::RGBToLuminance(a.rgb));
+    float wb = rcp(1.0 + Color::RGBToLuminance(b.rgb));
+    float wc = rcp(1.0 + Color::RGBToLuminance(c.rgb));
+    float wd = rcp(1.0 + Color::RGBToLuminance(d.rgb));
+    float wsum = wa + wb + wc + wd;
+    return (a * wa + b * wb + c * wc + d * wd) / wsum;
+}
+
+float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2 out_px_size)
+{
+    int x, y;
+    float4 retval = 0;
+    float4 fetches2x2[4];
+    float4 fetches3x3[9];
+
+    [unroll] for (x = 0; x < 2; ++x)
+        [unroll] for (y = 0; y < 2; ++y)
+            fetches2x2[x * 2 + y] = tex.SampleLevel(samp, uv + (int2(x, y) * 2 - 1) * out_px_size, 0);
+    
+    [unroll] for (x = 0; x < 3; ++x)
+        [unroll] for (y = 0; y < 3; ++y)
+            fetches3x3[x * 3 + y] = tex.SampleLevel(samp, uv + (int2(x, y) - 1) * 2 * out_px_size, 0);
+
+    retval += 0.5 * KarisAverage(fetches2x2[0], fetches2x2[1], fetches2x2[2], fetches2x2[3]);
+
+    [unroll] for (x = 0; x < 2; ++x)
+        [unroll] for (y = 0; y < 2; ++y)
+            retval += 0.125 * KarisAverage(fetches3x3[x * 3 + y], fetches3x3[(x + 1) * 3 + y], fetches3x3[x * 3 + y + 1], fetches3x3[(x + 1) * 3 + y + 1]);
+
+    return retval;
+}
+
+float4 main(PSInput input) : SV_TARGET
+{
+    // Use the actual source texture texel size for proper sampling
+    return DownsampleCODFirstMip(InputTexture, LinearSampler, input.texcoord, SourceTexelSize);
+}
+)HLSL";
 }

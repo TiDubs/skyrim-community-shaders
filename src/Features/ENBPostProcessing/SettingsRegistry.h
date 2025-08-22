@@ -105,7 +105,7 @@ public:
 
 	// Setting access
 	template <typename T>
-	T GetValue(const std::string& key, const std::string& category);
+	T GetValue(const std::string& key, const std::string& category, bool rawValue = false);
 
 	template <typename T>
 	void SetValue(const std::string& key, const std::string& category, const T& value);

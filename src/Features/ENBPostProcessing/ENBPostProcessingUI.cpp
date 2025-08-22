@@ -209,7 +209,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 					switch (settingInfo->type) {
 					case SettingType::Bool:
 						{
-							bool v = settingsRegistry.GetValue<bool>(settingKey, category);
+							bool v = settingsRegistry.GetValue<bool>(settingKey, category, true);
 							if (ImGui::Checkbox(("##" + settingKey).c_str(), &v)) {
 								settingsRegistry.SetValue<bool>(settingKey, category, v);
 							}
@@ -217,7 +217,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 						}
 					case SettingType::Float:
 						{
-							float v = settingsRegistry.GetValue<float>(settingKey, category);
+							float v = settingsRegistry.GetValue<float>(settingKey, category, true);
 							if (ImGui::SliderFloat(("##" + settingKey).c_str(), &v, settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
 								settingsRegistry.SetValue<float>(settingKey, category, v);
 							}
@@ -226,7 +226,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 					case SettingType::TimeOfDay:
 						{
 							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey, category);
+							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey, category, true);
 							bool changed = false;
 
 							for (const auto& timeOfDay : timeOfDayNames) {
