@@ -364,7 +364,7 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	context->PSSetShader(downsamplePS.get(), nullptr, 0);
 
 	context->Draw(4, 0);
-	
+
 	context->GenerateMips(texture.srvChain.get());
 }
 

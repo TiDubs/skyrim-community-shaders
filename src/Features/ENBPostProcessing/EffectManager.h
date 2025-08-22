@@ -7,7 +7,6 @@
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
 
-
 class EffectManager
 {
 public:
