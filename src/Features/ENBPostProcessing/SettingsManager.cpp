@@ -1,6 +1,7 @@
 #include "SettingsManager.h"
 
 #include "WeatherManager.h"
+#include "EffectManager.h"
 
 SettingsManager& SettingsManager::GetSingleton()
 {
@@ -704,6 +705,26 @@ void SettingsManager::SetIgnoreWeatherSystem(const std::string& category, bool i
 void SettingsManager::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
 {
 	ignoreWeatherSystemInterior[category] = ignore;
+}
+
+void SettingsManager::Load()
+{
+	LoadFromFile("enbseries.ini");
+	ReloadAllWeatherSettings();
+
+	EffectManager::GetSingleton().Load();
+
+	logger::info("[SettingsManager] Loaded all settings and effects");
+}
+
+void SettingsManager::Save()
+{
+	SaveToFile("enbseries.ini");
+	SaveAllWeatherSettings();
+
+	EffectManager::GetSingleton().Save();
+
+	logger::info("[SettingsManager] Saved all settings and effects");
 }
 
 // Explicit template instantiations

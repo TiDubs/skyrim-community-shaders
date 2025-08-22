@@ -2,7 +2,6 @@
 
 #include "EffectManager.h"
 #include "TextureManager.h"
-#include "ENBDownsampler.h"
 
 void ENBBloom::Execute()
 {
@@ -13,10 +12,10 @@ void ENBBloom::Execute()
 	auto textureBloom = textureManager.GetCommonTexture("TextureBloom");
 
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
-	auto& downsampler = ENBDownsampler::GetSingleton();
+	auto& effectManager = EffectManager::GetSingleton();
 
 	ENBTexture downsampledInput{};
-	downsampledInput.srv = downsampler.GetTexture();
+	downsampledInput.srv = effectManager.GetDownsampleTexture();
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInput, *textureBloom, *textureHDRTemp);
 }
@@ -24,8 +23,8 @@ void ENBBloom::Execute()
 void ENBBloom::UpdateEffectVariables()
 {
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
-	auto& downsampler = ENBDownsampler::GetSingleton();
-	SetShaderResourceVariable("TextureDownsampled", downsampler.GetTexture());
+	auto& effectManager = EffectManager::GetSingleton();
+	SetShaderResourceVariable("TextureDownsampled", effectManager.GetDownsampleTexture());
 
 	// Set original texture, not typically used due to aliasing
 	SetShaderResourceVariable("TextureOriginal", globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRV);

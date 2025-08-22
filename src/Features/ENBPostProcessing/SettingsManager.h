@@ -1,8 +1,5 @@
 #pragma once
 
-// Forward declaration
-class WeatherManager;
-
 enum class SettingType
 {
 	Bool,
@@ -126,6 +123,10 @@ public:
 	// File I/O
 	void LoadFromFile(const std::string& filePath);
 	void SaveToFile(const std::string& filePath);
+
+	// Effect save/load coordination
+	void Load();
+	void Save();
 
 	// Weather ignore settings management
 	void SaveWeatherIgnoreSettings(const std::string& filePath);

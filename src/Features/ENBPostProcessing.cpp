@@ -1,10 +1,8 @@
 #include "ENBPostProcessing.h"
-#include "ENBPostProcessing/ENBPostProcessingUI.h"
+
+#include "ENBPostProcessing/MenuManager.h"
 #include "ENBPostProcessing/SettingsManager.h"
-#include "ENBPostProcessing/TextureManager.h"
-#include "ENBPostProcessing/WeatherManager.h"
-#include "PCH.h"
-#include "State.h"
+#include "ENBPostProcessing/EffectManager.h"
 
 void ENBPostProcessing::SaveSettings(json&)
 {
@@ -20,17 +18,16 @@ void ENBPostProcessing::RestoreDefaultSettings()
 
 void ENBPostProcessing::DrawSettings()
 {
-	ENBPostProcessingUI::GetSingleton().RenderImGui();
+	MenuManager::GetSingleton().RenderImGui();
 }
 
 void ENBPostProcessing::SetupResources()
 {
-	// Initialize subsystems first
-	TextureManager::GetSingleton().Initialize();
-	WeatherManager::GetSingleton().Initialize();
-
 	// Then initialize the effect manager
 	EffectManager::GetSingleton().Initialize();
+
+	// Load registered settings
+	SettingsManager::GetSingleton().Load();
 }
 
 void ENBPostProcessing::Reset()

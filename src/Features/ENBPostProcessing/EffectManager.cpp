@@ -1,20 +1,12 @@
 #include "EffectManager.h"
-#include "ENBAdaptation.h"
-#include "ENBBloom.h"
-#include "ENBDepthOfField.h"
-#include "ENBEffect.h"
-#include "ENBEffectPostPass.h"
-#include "ENBLens.h"
-#include "ENBPostProcessingUI.h"
-#include "Globals.h"
-#include "SettingsManager.h"
+
 #include "State.h"
-#include "Utils/D3D.h"
+
+#include "SettingsManager.h"
 #include "WeatherManager.h"
-#include <d3dcompiler.h>
-#include <functional>
-#include "ENBDownsampler.h"
 #include "TextureManager.h"
+
+#include <d3dcompiler.h>
 
 EffectManager& EffectManager::GetSingleton()
 {
@@ -24,6 +16,7 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
+	TextureManager::GetSingleton().Initialize();
 	RegisterSettings();
 	CreateCommonResources();
 	Apply();
@@ -31,48 +24,32 @@ void EffectManager::Initialize()
 
 void EffectManager::Apply()
 {
-	LoadENBSettings();
-
-	logger::info("[ENBPP] Applying effects");
-
 	enbDepthOfField.Apply();
 	enbBloom.Apply();
 	enbLens.Apply();
 	enbAdaptation.Apply();
 	enbEffect.Apply();
 	enbEffectPostPass.Apply();
-
-	logger::info("[ENBPP] Applied effects");
 }
 
 void EffectManager::Load()
 {
-	LoadENBSettings();
-
-	logger::info("[ENBPP] Loading effects");
-
 	enbDepthOfField.Load();
 	enbBloom.Load();
 	enbLens.Load();
 	enbAdaptation.Load();
 	enbEffect.Load();
 	enbEffectPostPass.Load();
-
-	logger::info("[ENBPP] Loaded effects");
 }
 
 void EffectManager::Save()
 {
-	logger::info("[ENBPP] Saving effects");
-
 	enbDepthOfField.Save();
 	enbBloom.Save();
 	enbLens.Save();
 	enbAdaptation.Save();
 	enbEffect.Save();
 	enbEffectPostPass.Save();
-
-	logger::info("[ENBPP] Saved effects");
 }
 
 void EffectManager::RegisterSettings()
@@ -139,8 +116,7 @@ void EffectManager::ExecuteEffects()
 	}
 
 	// Downsampled texture shared between bloom, lens and adaptation
-	auto& downsampler = ENBDownsampler::GetSingleton();
-	downsampler.DownsampleToFixed(textureOriginal.SRV, const_cast<ENBDownsampler::FixedDownsampleTexture&>(downsampler.GetSharedDownsampleTexture()));
+	DownsampleToFixed(textureOriginal.SRV, sharedDownsampleTexture);
 
 	if (enbBloom.IsCompiled()) {
 		state->BeginPerfEvent(enbBloom.GetName());
@@ -199,9 +175,10 @@ void EffectManager::CreateCommonResources()
 	CreateRenderStates();
 	CreateCopyShaders();
 	CreateColorCorrectionShader();
+	CreateDownsampleShader();
 
-	// Initialize downsampler and create shared downsample chain
-	ENBDownsampler::GetSingleton().Initialize();
+	// Create shared downsample texture
+	sharedDownsampleTexture = CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void EffectManager::CreateQuadGeometry()
@@ -610,16 +587,23 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 		return;
 	}
 
+	auto& settingsManager = SettingsManager::GetSingleton();
+
+	auto brightness = settingsManager.GetValue<float>("Brightness", "COLORCORRECTION");
+	auto gammaCurve = settingsManager.GetValue<float>("GammaCurve", "COLORCORRECTION");
+
+	if (brightness == 1.0f && gammaCurve == 1.0f)
+		return;
+
 	auto context = globals::d3d::context;
 
 	// Update constant buffer with current settings
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr)) {
-		auto& registry = SettingsManager::GetSingleton();
 		float* cbData = static_cast<float*>(mapped.pData);
-		cbData[0] = registry.GetValue<float>("Brightness", "COLORCORRECTION");
-		cbData[1] = registry.GetValue<float>("GammaCurve", "COLORCORRECTION");
+		cbData[0] = brightness;
+		cbData[1] = gammaCurve;
 		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
 	}
 
@@ -640,30 +624,277 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	UINT dispatchX = (texDesc.Width + 7) / 8;
 	UINT dispatchY = (texDesc.Height + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
+
+	// Clear bindings
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+	ID3D11Buffer* nullCB = nullptr;
+	context->CSSetShader(nullptr, nullptr, 0);
+	context->CSSetConstantBuffers(0, 1, &nullCB);
+	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }
 
-void EffectManager::LoadENBSettings()
+void EffectManager::CreateDownsampleShader()
 {
-	auto& registry = SettingsManager::GetSingleton();
-	registry.LoadFromFile("enbseries.ini");
+	auto device = globals::d3d::device;
+
+	// Compile pixel shader
+	ComPtr<ID3DBlob> psBlob;
+	ComPtr<ID3DBlob> errorBlob;
+
+	const char* downsamplePixelShaderSource = R"HLSL(
+Texture2D<float4> SourceTexture : register(t0);
+SamplerState LinearSampler : register(s0);
+
+cbuffer DownsampleConstants : register(b0)
+{
+    float2 SourceTexelSize;
+};
+
+// Color luminance calculation
+namespace Color
+{
+    float RGBToLuminance(float3 rgb)
+    {
+        return dot(rgb, float3(0.2126, 0.7152, 0.0722));
+    }
 }
 
-void EffectManager::SaveENBSettings()
+float4 KarisAverage(float4 a, float4 b, float4 c, float4 d)
 {
-	auto& registry = SettingsManager::GetSingleton();
-	registry.SaveToFile("enbseries.ini");
+    float wa = rcp(1.0 + Color::RGBToLuminance(a.rgb));
+    float wb = rcp(1.0 + Color::RGBToLuminance(b.rgb));
+    float wc = rcp(1.0 + Color::RGBToLuminance(c.rgb));
+    float wd = rcp(1.0 + Color::RGBToLuminance(d.rgb));
+    float wsum = wa + wb + wc + wd;
+    return (a * wa + b * wb + c * wc + d * wd) / wsum;
 }
 
-void EffectManager::LoadAllWeatherSettings()
+float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2 out_px_size)
 {
-	auto& registry = SettingsManager::GetSingleton();
-	registry.ReloadAllWeatherSettings();
-	logger::info("[EffectManager] Loaded all weather settings");
+    int x, y;
+    float4 retval = 0;
+    float4 fetches2x2[4];
+    float4 fetches3x3[9];
+
+    [unroll] for (x = 0; x < 2; ++x)
+        [unroll] for (y = 0; y < 2; ++y)
+            fetches2x2[x * 2 + y] = tex.SampleLevel(samp, uv + (int2(x, y) * 2 - 1) * out_px_size, 0);
+
+    [unroll] for (x = 0; x < 3; ++x)
+        [unroll] for (y = 0; y < 3; ++y)
+            fetches3x3[x * 3 + y] = tex.SampleLevel(samp, uv + (int2(x, y) - 1) * 2 * out_px_size, 0);
+
+    retval += 0.5 * KarisAverage(fetches2x2[0], fetches2x2[1], fetches2x2[2], fetches2x2[3]);
+
+    [unroll] for (x = 0; x < 2; ++x)
+        [unroll] for (y = 0; y < 2; ++y)
+            retval += 0.125 * KarisAverage(fetches3x3[x * 3 + y], fetches3x3[(x + 1) * 3 + y], fetches3x3[x * 3 + y + 1], fetches3x3[(x + 1) * 3 + y + 1]);
+
+    return retval;
 }
 
-void EffectManager::SaveAllWeatherSettings()
+struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
+
+float4 main(PS_INPUT input) : SV_TARGET {
+    return DownsampleCODFirstMip(SourceTexture, LinearSampler, input.txcoord0, SourceTexelSize);
+}
+)HLSL";
+
+	auto hr = D3DCompile(
+		downsamplePixelShaderSource,
+		strlen(downsamplePixelShaderSource),
+		nullptr,
+		nullptr,
+		nullptr,
+		"main",
+		"ps_5_0",
+		0,
+		0,
+		&psBlob,
+		&errorBlob);
+
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("[ENBPP] Downsampling pixel shader compilation failed: {}",
+				static_cast<const char*>(errorBlob->GetBufferPointer()));
+		}
+		return;
+	}
+
+	hr = device->CreatePixelShader(
+		psBlob->GetBufferPointer(),
+		psBlob->GetBufferSize(),
+		nullptr,
+		&downsamplePS);
+
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create downsampling pixel shader");
+		return;
+	}
+
+	// Create linear sampler state
+	D3D11_SAMPLER_DESC samplerDesc = {};
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	samplerDesc.MinLOD = 0;
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+	hr = device->CreateSamplerState(&samplerDesc, &linearSampler);
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create linear sampler state");
+		return;
+	}
+
+	logger::info("[ENBPP] Successfully compiled downsampling shader and created resources");
+}
+
+EffectManager::FixedDownsampleTexture EffectManager::CreateFixedDownsampleTexture(DXGI_FORMAT format)
 {
-	auto& registry = SettingsManager::GetSingleton();
-	registry.SaveAllWeatherSettings();
-	logger::info("[EffectManager] Saved all weather settings");
+	auto device = globals::d3d::device;
+	FixedDownsampleTexture fixedTexture;
+
+	// Create 1024x1024 texture with 3 mip levels (1024, 512, 256)
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = 1024;
+	texDesc.Height = 1024;
+	texDesc.MipLevels = 3;  // 1024, 512, 256
+	texDesc.ArraySize = 1;
+	texDesc.Format = format;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.CPUAccessFlags = 0;
+	texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.GetAddressOf()));
+
+	// Create RTV for mip 0 (1024x1024)
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.Format = format;
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Texture2D.MipSlice = 0;
+
+	DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.Get(), &rtvDesc, fixedTexture.rtv.GetAddressOf()));
+
+	// Create SRVs for each mip level
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = format;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 3;
+
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvChain.GetAddressOf()));
+
+	srvDesc.Texture2D.MipLevels = 1;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srv.GetAddressOf()));
+
+	srvDesc.Texture2D.MostDetailedMip = 2;
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvBlurry.GetAddressOf()));
+
+	// Set debug names
+	Util::SetResourceName(fixedTexture.texture.Get(), "EffectManager::FixedDownsampleTexture (1024x1024, 3 mips)");
+	Util::SetResourceName(fixedTexture.rtv.Get(), "EffectManager::FixedDownsampleTexture RTV");
+	Util::SetResourceName(fixedTexture.srvChain.Get(), "EffectManager::FixedDownsampleTexture SRV Chain");
+	Util::SetResourceName(fixedTexture.srv.Get(), "EffectManager::FixedDownsampleTexture SRV 1024x1024");
+	Util::SetResourceName(fixedTexture.srvBlurry.Get(), "EffectManager::FixedDownsampleTexture SRV 256x256");
+
+	logger::info("[ENBPP] Created fixed downsample texture: 1024x1024 with 3 mips (1024, 512, 256)");
+
+	return fixedTexture;
+}
+
+void EffectManager::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture)
+{
+	auto context = globals::d3d::context;
+
+	// Get source texture dimensions
+	ComPtr<ID3D11Resource> sourceResource;
+	source->GetResource(&sourceResource);
+	ComPtr<ID3D11Texture2D> sourceTexture;
+	sourceResource.As(&sourceTexture);
+	D3D11_TEXTURE2D_DESC sourceDesc;
+	sourceTexture->GetDesc(&sourceDesc);
+
+	// Calculate source texel size for the shader
+	float sourceTexelSizeX = 1.0f / static_cast<float>(sourceDesc.Width);
+	float sourceTexelSizeY = 1.0f / static_cast<float>(sourceDesc.Height);
+
+	// Update constant buffer with source texel size
+	struct DownsampleConstants
+	{
+		float sourceTexelSize[2];  // x = 1/width, y = 1/height
+		float padding[2];          // padding to 16-byte alignment
+	} constants;
+
+	constants.sourceTexelSize[0] = sourceTexelSizeX;
+	constants.sourceTexelSize[1] = sourceTexelSizeY;
+
+	// Create and update constant buffer (simple approach for now)
+	D3D11_BUFFER_DESC cbDesc = {};
+	cbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	cbDesc.ByteWidth = sizeof(constants);
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	D3D11_SUBRESOURCE_DATA cbData = {};
+	cbData.pSysMem = &constants;
+
+	ComPtr<ID3D11Buffer> constantBuffer;
+	auto device = globals::d3d::device;
+	device->CreateBuffer(&cbDesc, &cbData, &constantBuffer);
+
+	// Set render target to the 1024x1024 mip level 0
+	context->OMSetRenderTargets(1, texture.rtv.GetAddressOf(), nullptr);
+
+	// Set viewport to 1024x1024
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = 1024.0f;
+	viewport.Height = 1024.0f;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
+
+	// Set shaders and resources
+	context->PSSetShader(downsamplePS.Get(), nullptr, 0);
+	context->PSSetConstantBuffers(0, 1, constantBuffer.GetAddressOf());
+	context->PSSetShaderResources(0, 1, &source);
+	context->PSSetSamplers(0, 1, linearSampler.GetAddressOf());
+
+	// Draw fullscreen quad
+	context->Draw(4, 0);
+
+	// Clear bindings before GenerateMips
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	ID3D11Buffer* nullCB = nullptr;
+	context->PSSetShaderResources(0, 1, &nullSRV);
+	context->PSSetConstantBuffers(0, 1, &nullCB);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	// Generate mips for the remaining levels (512, 256)
+	context->GenerateMips(texture.srvChain.Get());
+}
+
+ID3D11ShaderResourceView* EffectManager::GetDownsampleTexture() const
+{
+	return sharedDownsampleTexture.srv.Get();
+}
+
+ID3D11ShaderResourceView* EffectManager::GetDownsampleTextureBlurry() const
+{
+	return sharedDownsampleTexture.srvBlurry.Get();
+}
+
+void EffectManager::RenderEffectsList()
+{
+	enbDepthOfField.RenderImGui();
+	enbBloom.RenderImGui();
+	enbLens.RenderImGui();
+	enbAdaptation.RenderImGui();
+	enbEffect.RenderImGui();
+	enbEffectPostPass.RenderImGui();
 }

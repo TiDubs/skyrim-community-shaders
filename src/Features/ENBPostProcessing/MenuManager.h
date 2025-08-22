@@ -3,10 +3,10 @@
 #include "EffectManager.h"
 #include "WeatherManager.h"
 
-class ENBPostProcessingUI
+class MenuManager
 {
 public:
-	static ENBPostProcessingUI& GetSingleton();
+	static MenuManager& GetSingleton();
 
 	// Main UI rendering method
 	void RenderImGui();

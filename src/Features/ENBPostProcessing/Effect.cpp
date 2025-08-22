@@ -979,109 +979,118 @@ void Effect::UpdateUIVariables()
 
 void Effect::RenderImGui()
 {
-	bool valuesChanged = false;
+	if (ImGui::CollapsingHeader(GetName().c_str())) {
+		bool valuesChanged = false;
 
-	// Use table
-	if (ImGui::BeginTable(("effect_table_" + GetName()).c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
-		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		// Use table
+		if (ImGui::BeginTable(("effect_table_" + GetName()).c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-		if (!uiTechniques.empty()) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("TECHNIQUE");
-
-			ImGui::TableSetColumnIndex(1);
-			const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
-			if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
-				for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
-					const bool isSelected = (selectedTechniqueIndex == i);
-					if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
-						selectedTechniqueIndex = i;
-						valuesChanged = true;
-					}
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-				ImGui::EndCombo();
-			}
-		}
-
-		for (auto& uiVar : uiVariables) {
-			if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
+			if (!uiTechniques.empty()) {
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
-				ImGui::Spacing();
-				continue;
-			}
+				ImGui::Text("TECHNIQUE");
 
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%s", uiVar.displayName.c_str());
-
-			// Skip inputs
-			bool isLabelOnly = ((uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-								(uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
-
-			if (isLabelOnly) {
-				continue;
-			}
-
-			ImGui::TableSetColumnIndex(1);
-
-			std::string id = "##" + uiVar.displayName + "_" + GetName();
-			const char* currentItem = "";
-
-			switch (uiVar.type) {
-			case UIVariableType::Float:
-				if (ImGui::SliderFloat(id.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
-					valuesChanged = true;
-				}
-				break;
-			case UIVariableType::Int:
-				if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
-					// For dropdowns
-					currentItem = (uiVar.intValue >= 0 && uiVar.intValue < (int)uiVar.dropdownItems.size()) ? uiVar.dropdownItems[uiVar.intValue].c_str() : "";
-					if (ImGui::BeginCombo(id.c_str(), currentItem)) {
-						for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
-							if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
-								uiVar.intValue = i;
-								valuesChanged = true;
-							}
+				ImGui::TableSetColumnIndex(1);
+				const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
+				if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
+					for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
+						const bool isSelected = (selectedTechniqueIndex == i);
+						if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
+							selectedTechniqueIndex = i;
+							valuesChanged = true;
 						}
-						ImGui::EndCombo();
+						if (isSelected) {
+							ImGui::SetItemDefaultFocus();
+						}
 					}
-				} else {
-					if (ImGui::SliderInt(id.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
+					ImGui::EndCombo();
+				}
+			}
+
+			for (auto& uiVar : uiVariables) {
+				if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Spacing();
+					continue;
+				}
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%s", uiVar.displayName.c_str());
+
+				// Skip inputs
+				bool isLabelOnly = ((uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
+									(uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
+
+				if (isLabelOnly) {
+					continue;
+				}
+
+				ImGui::TableSetColumnIndex(1);
+
+				std::string id = "##" + uiVar.displayName + "_" + GetName();
+				const char* currentItem = "";
+
+				switch (uiVar.type) {
+				case UIVariableType::Float:
+					if (ImGui::SliderFloat(id.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
 						valuesChanged = true;
 					}
+					break;
+				case UIVariableType::Int:
+					if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
+						// For dropdowns
+						currentItem = (uiVar.intValue >= 0 && uiVar.intValue < (int)uiVar.dropdownItems.size()) ? uiVar.dropdownItems[uiVar.intValue].c_str() : "";
+						if (ImGui::BeginCombo(id.c_str(), currentItem)) {
+							for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
+								if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
+									uiVar.intValue = i;
+									valuesChanged = true;
+								}
+							}
+							ImGui::EndCombo();
+						}
+					} else {
+						if (ImGui::SliderInt(id.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
+							valuesChanged = true;
+						}
+					}
+					break;
+				case UIVariableType::Bool:
+					if (ImGui::Checkbox(id.c_str(), &uiVar.boolValue)) {
+						valuesChanged = true;
+					}
+					break;
+				case UIVariableType::Color3:
+					if (ImGui::ColorEdit3(id.c_str(), uiVar.colorValue)) {
+						valuesChanged = true;
+					}
+					break;
+				case UIVariableType::Color4:
+					if (ImGui::ColorEdit4(id.c_str(), uiVar.colorValue)) {
+						valuesChanged = true;
+					}
+					break;
 				}
-				break;
-			case UIVariableType::Bool:
-				if (ImGui::Checkbox(id.c_str(), &uiVar.boolValue)) {
-					valuesChanged = true;
-				}
-				break;
-			case UIVariableType::Color3:
-				if (ImGui::ColorEdit3(id.c_str(), uiVar.colorValue)) {
-					valuesChanged = true;
-				}
-				break;
-			case UIVariableType::Color4:
-				if (ImGui::ColorEdit4(id.c_str(), uiVar.colorValue)) {
-					valuesChanged = true;
-				}
-				break;
 			}
+
+			ImGui::EndTable();
 		}
 
-		ImGui::EndTable();
-	}
+		// Update shader variables if any values changed
+		if (valuesChanged) {
+			UpdateUIVariables();
+		}
 
-	// Update shader variables if any values changed
-	if (valuesChanged) {
-		UpdateUIVariables();
+		// Show compilation errors if any
+		if (!errors.empty()) {
+			for (const auto& error : errors) {
+				ImGui::TextWrapped("%s", error.c_str());
+			}
+		}
 	}
 }
 

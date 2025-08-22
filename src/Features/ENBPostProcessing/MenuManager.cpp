@@ -1,14 +1,15 @@
-﻿#include "ENBPostProcessingUI.h"
-#include "PCH.h"
-#include "SettingsManager.h"
+﻿#include "MenuManager.h"
 
-ENBPostProcessingUI& ENBPostProcessingUI::GetSingleton()
+#include "SettingsManager.h"
+#include "EffectManager.h"
+
+MenuManager& MenuManager::GetSingleton()
 {
-	static ENBPostProcessingUI instance;
+	static MenuManager instance;
 	return instance;
 }
 
-void ENBPostProcessingUI::RenderImGui()
+void MenuManager::RenderImGui()
 {
 	if (!ImGui::BeginTable("ENBPostProcessing", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
 		return;
@@ -29,21 +30,19 @@ void ENBPostProcessingUI::RenderImGui()
 	// Right side - Effects
 	ImGui::TableSetColumnIndex(1);
 	if (ImGui::BeginChild("Effects", ImVec2(0, 0), false)) {
-		RenderEffectsList();
+		EffectManager::GetSingleton().RenderEffectsList();
 	}
 	ImGui::EndChild();
 
 	ImGui::EndTable();
 }
 
-void ENBPostProcessingUI::RenderSettingsPanel()
+void MenuManager::RenderSettingsPanel()
 {
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& settingsManager = SettingsManager::GetSingleton();
 
 	if (ImGui::Button("Load")) {
-		effectManager.Load();
-		effectManager.LoadENBSettings();
-		effectManager.LoadAllWeatherSettings();
+		settingsManager.Load();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations");
@@ -52,9 +51,7 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 	ImGui::SameLine();
 
 	if (ImGui::Button("Save")) {
-		effectManager.Save();
-		effectManager.SaveENBSettings();
-		effectManager.SaveAllWeatherSettings();
+		settingsManager.Save();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Save all settings to enbseries.ini, weather files, and effect configurations");
@@ -64,27 +61,7 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 	RenderAllSettings();
 }
 
-void ENBPostProcessingUI::RenderEffectsList()
-{
-	auto& effectManager = EffectManager::GetSingleton();
-
-	for (auto& [name, effect] : effectManager.effects) {
-		const auto& errors = effect->GetErrors();
-
-		if (ImGui::CollapsingHeader(name.c_str())) {
-			effect->RenderImGui();
-
-			// Show compilation errors if any
-			if (!errors.empty()) {
-				for (const auto& error : errors) {
-					ImGui::TextWrapped("%s", error.c_str());
-				}
-			}
-		}
-	}
-}
-
-void ENBPostProcessingUI::RenderWeatherControl()
+void MenuManager::RenderWeatherControl()
 {
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& weatherManager = WeatherManager::GetSingleton();
@@ -148,7 +125,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 	}
 }
 
-void ENBPostProcessingUI::RenderAllSettings()
+void MenuManager::RenderAllSettings()
 {
 	auto& settingsRegistry = SettingsManager::GetSingleton();
 
