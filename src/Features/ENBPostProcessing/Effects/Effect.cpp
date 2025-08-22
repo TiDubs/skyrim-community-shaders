@@ -5,7 +5,7 @@
 #include <DirectXTK/WICTextureLoader.h>
 
 #include "State.h"
-#include "TextureManager.h"
+#include "../TextureManager.h"
 
 bool Effect::Load()
 {

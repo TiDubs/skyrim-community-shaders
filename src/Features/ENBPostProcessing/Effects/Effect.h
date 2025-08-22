@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ENBTexture.h"
+#include "../ENBTexture.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>

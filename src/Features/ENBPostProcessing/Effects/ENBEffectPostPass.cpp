@@ -1,6 +1,6 @@
 #include "ENBEffectPostPass.h"
 
-#include "TextureManager.h"
+#include "../TextureManager.h"
 
 void ENBEffectPostPass::Execute()
 {
