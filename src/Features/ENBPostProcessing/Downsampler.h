@@ -22,9 +22,9 @@ public:
 	struct FixedDownsampleTexture
 	{
 		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11ShaderResourceView> srvChain;  // Mip 0 -> Mip 1 -> Mip2
-		ComPtr<ID3D11ShaderResourceView> srv;  // Mip 0: 1024x1024
-		ComPtr<ID3D11ShaderResourceView> srvBlurry;   // Mip 2: 256x256
+		ComPtr<ID3D11ShaderResourceView> srvChain;   // Mip 0 -> Mip 1 -> Mip2
+		ComPtr<ID3D11ShaderResourceView> srv;        // Mip 0: 1024x1024
+		ComPtr<ID3D11ShaderResourceView> srvBlurry;  // Mip 2: 256x256
 		ComPtr<ID3D11RenderTargetView> rtv;
 	};
 
@@ -43,7 +43,7 @@ public:
 private:
 	// Compile the downsample shaders
 	bool CompileShaders();
-	
+
 	// Shader source strings
 	static const char* GetDownsamplePixelShaderSource();
 
