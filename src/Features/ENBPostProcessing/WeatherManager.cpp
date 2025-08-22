@@ -1,6 +1,6 @@
 #include "WeatherManager.h"
 #include "PCH.h"
-#include "SettingsManager.h"
+#include "SettingManager.h"
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>
@@ -73,7 +73,7 @@ void WeatherManager::LoadWeatherList()
 		entry.fileName = fileName;
 		ParseWeatherIDs(weatherIDsStr, entry.weatherIDs);
 
-		// Load the weather file through SettingsManager
+		// Load the weather file through SettingManager
 		std::filesystem::path weatherFilePath = "enbseries/" + entry.fileName;
 		if (std::filesystem::exists(weatherFilePath)) {
 			// Create weather key for each weather ID
@@ -81,7 +81,7 @@ void WeatherManager::LoadWeatherList()
 				std::ostringstream oss;
 				oss << "weather_" << weatherID;
 				std::string weatherKey = oss.str();
-				SettingsManager::GetSingleton().LoadWeatherSettings(weatherKey, weatherFilePath.string());
+				SettingManager::GetSingleton().LoadWeatherSettings(weatherKey, weatherFilePath.string());
 			}
 		} else {
 			logger::warn("[WeatherManager] Weather file not found: {}", weatherFilePath.string());

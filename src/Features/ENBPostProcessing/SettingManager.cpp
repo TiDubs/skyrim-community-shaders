@@ -1,15 +1,15 @@
-#include "SettingsManager.h"
+#include "SettingManager.h"
 
 #include "EffectManager.h"
 #include "WeatherManager.h"
 
-SettingsManager& SettingsManager::GetSingleton()
+SettingManager& SettingManager::GetSingleton()
 {
-	static SettingsManager instance;
+	static SettingManager instance;
 	return instance;
 }
 
-void SettingsManager::RegisterBoolSetting(const std::string& key, const std::string& category,
+void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
 	bool defaultValue, bool hasWeatherSupport)
 {
 	auto setting = std::make_unique<SettingInfo>();
@@ -24,7 +24,7 @@ void SettingsManager::RegisterBoolSetting(const std::string& key, const std::str
 	settings[compositeKey] = std::move(setting);
 }
 
-void SettingsManager::RegisterFloatSetting(const std::string& key, const std::string& category,
+void SettingManager::RegisterFloatSetting(const std::string& key, const std::string& category,
 	float defaultValue, float minValue, float maxValue, bool hasWeatherSupport)
 {
 	auto setting = std::make_unique<SettingInfo>();
@@ -41,7 +41,7 @@ void SettingsManager::RegisterFloatSetting(const std::string& key, const std::st
 	settings[compositeKey] = std::move(setting);
 }
 
-void SettingsManager::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
+void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 	const TimeOfDayValue& defaultValue, bool hasWeatherSupport)
 {
 	auto setting = std::make_unique<SettingInfo>();
@@ -57,12 +57,12 @@ void SettingsManager::RegisterTimeOfDaySetting(const std::string& key, const std
 }
 
 template <typename T>
-T SettingsManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
+T SettingManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	auto it = settings.find(compositeKey);
 	if (it == settings.end()) {
-		logger::error("[SettingsManager] Setting '{}::{}' not found", category, key);
+		logger::error("[SettingManager] Setting '{}::{}' not found", category, key);
 		return T{};
 	}
 
@@ -146,12 +146,12 @@ T SettingsManager::GetValue(const std::string& key, const std::string& category,
 }
 
 template <typename T>
-void SettingsManager::SetValue(const std::string& key, const std::string& category, const T& value)
+void SettingManager::SetValue(const std::string& key, const std::string& category, const T& value)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	auto it = settings.find(compositeKey);
 	if (it == settings.end()) {
-		logger::error("[SettingsManager] Setting '{}::{}' not found", category, key);
+		logger::error("[SettingManager] Setting '{}::{}' not found", category, key);
 		return;
 	}
 
@@ -181,7 +181,7 @@ void SettingsManager::SetValue(const std::string& key, const std::string& catego
 		// If ignore is set, update base setting value (same as GetValue logic)
 		if (shouldIgnoreWeather) {
 			it->second->currentValue = value;
-			logger::debug("[SettingsManager] Updated base setting [{}]::{} (weather ignored)", category, key);
+			logger::debug("[SettingManager] Updated base setting [{}]::{} (weather ignored)", category, key);
 			return;
 		}
 
@@ -204,7 +204,7 @@ void SettingsManager::SetValue(const std::string& key, const std::string& catego
 				// Update the weather-specific value
 				weatherSettings[weatherKey][compositeKey] = value;
 
-				logger::debug("[SettingsManager] Updated weather setting [{}]::{} for weather {} (blend: {:.2f})",
+				logger::debug("[SettingManager] Updated weather setting [{}]::{} for weather {} (blend: {:.2f})",
 					category, key, targetWeatherID, weatherBlendFactor);
 				return;
 			}
@@ -213,10 +213,10 @@ void SettingsManager::SetValue(const std::string& key, const std::string& catego
 
 	// Update the base setting value (fallback or non-weather setting)
 	it->second->currentValue = value;
-	logger::debug("[SettingsManager] Updated base setting [{}]::{}", category, key);
+	logger::debug("[SettingManager] Updated base setting [{}]::{}", category, key);
 }
 
-float SettingsManager::GetInterpolatedTimeOfDayValue(const std::string& key)
+float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key)
 {
 	// This method is deprecated - try to find the setting by key across all categories
 	// This is kept for backwards compatibility but should be avoided
@@ -226,30 +226,30 @@ float SettingsManager::GetInterpolatedTimeOfDayValue(const std::string& key)
 			return ComputeTimeOfDayInterpolation(timeOfDayValue);
 		}
 	}
-	logger::warn("[SettingsManager] GetInterpolatedTimeOfDayValue: Setting '{}' not found", key);
+	logger::warn("[SettingManager] GetInterpolatedTimeOfDayValue: Setting '{}' not found", key);
 	return 0.0f;
 }
 
-float SettingsManager::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
+float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
 {
 	TimeOfDayValue timeOfDayValue = GetValue<TimeOfDayValue>(key, category);
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
 }
 
-bool SettingsManager::HasSetting(const std::string& key, const std::string& category) const
+bool SettingManager::HasSetting(const std::string& key, const std::string& category) const
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	return settings.find(compositeKey) != settings.end();
 }
 
-const SettingInfo* SettingsManager::GetSettingInfo(const std::string& key, const std::string& category) const
+const SettingInfo* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	auto it = settings.find(compositeKey);
 	return (it != settings.end()) ? it->second.get() : nullptr;
 }
 
-std::vector<std::string> SettingsManager::GetSettingsByCategory(const std::string& category) const
+std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string& category) const
 {
 	std::vector<std::string> result;
 	for (const auto& [compositeKey, setting] : settings) {
@@ -261,7 +261,7 @@ std::vector<std::string> SettingsManager::GetSettingsByCategory(const std::strin
 	return result;
 }
 
-std::vector<std::string> SettingsManager::GetAllCategories() const
+std::vector<std::string> SettingManager::GetAllCategories() const
 {
 	std::set<std::string> categorySet;
 	for (const auto& [key, setting] : settings) {
@@ -270,7 +270,7 @@ std::vector<std::string> SettingsManager::GetAllCategories() const
 	return std::vector<std::string>(categorySet.begin(), categorySet.end());
 }
 
-bool SettingsManager::CategoryHasWeatherSupport(const std::string& category) const
+bool SettingManager::CategoryHasWeatherSupport(const std::string& category) const
 {
 	for (const auto& [compositeKey, setting] : settings) {
 		if (setting->category == category && setting->hasWeatherSupport) {
@@ -280,7 +280,7 @@ bool SettingsManager::CategoryHasWeatherSupport(const std::string& category) con
 	return false;
 }
 
-std::vector<std::string> SettingsManager::GetCategoriesWithWeatherSupport() const
+std::vector<std::string> SettingManager::GetCategoriesWithWeatherSupport() const
 {
 	std::set<std::string> categoriesWithWeather;
 	for (const auto& [compositeKey, setting] : settings) {
@@ -291,17 +291,17 @@ std::vector<std::string> SettingsManager::GetCategoriesWithWeatherSupport() cons
 	return std::vector<std::string>(categoriesWithWeather.begin(), categoriesWithWeather.end());
 }
 
-void SettingsManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
+void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
 {
 	this->currentWeatherID = newCurrentWeatherID;
 	this->lastWeatherID = newLastWeatherID;
 	this->weatherBlendFactor = blendFactor;
 }
 
-void SettingsManager::LoadWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const std::string& filePath)
 {
 	if (!std::filesystem::exists(filePath)) {
-		logger::warn("[SettingsManager] Weather file not found: {}", filePath);
+		logger::warn("[SettingManager] Weather file not found: {}", filePath);
 		return;
 	}
 
@@ -318,14 +318,14 @@ void SettingsManager::LoadWeatherSettings(const std::string& weatherKey, const s
 		}
 	}
 
-	logger::debug("[SettingsManager] Loaded weather settings from: {}", filePath);
+	logger::debug("[SettingManager] Loaded weather settings from: {}", filePath);
 }
 
-void SettingsManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
 {
 	auto weatherIt = weatherSettings.find(weatherKey);
 	if (weatherIt == weatherSettings.end()) {
-		logger::warn("[SettingsManager] No weather settings found for key: {}", weatherKey);
+		logger::warn("[SettingManager] No weather settings found for key: {}", weatherKey);
 		return;
 	}
 
@@ -353,16 +353,16 @@ void SettingsManager::SaveWeatherSettings(const std::string& weatherKey, const s
 		SaveSettingToFile(filePath, setting.category, setting.key, tempSetting);
 	}
 
-	logger::debug("[SettingsManager] Saved weather settings to: {}", filePath);
+	logger::debug("[SettingManager] Saved weather settings to: {}", filePath);
 }
 
-void SettingsManager::SaveAllWeatherSettings()
+void SettingManager::SaveAllWeatherSettings()
 {
 	auto& weatherManager = WeatherManager::GetSingleton();
 	const auto& weatherEntries = weatherManager.GetWeatherEntries();
 
 	if (weatherEntries.empty()) {
-		logger::warn("[SettingsManager] No weather entries found, skipping weather file save");
+		logger::warn("[SettingManager] No weather entries found, skipping weather file save");
 		return;
 	}
 
@@ -417,13 +417,13 @@ void SettingsManager::SaveAllWeatherSettings()
 		}
 
 		savedCount++;
-		logger::debug("[SettingsManager] Saved settings to weather file: {}", weatherFilePath);
+		logger::debug("[SettingManager] Saved settings to weather file: {}", weatherFilePath);
 	}
 
-	logger::info("[SettingsManager] Saved settings to {} weather files", savedCount);
+	logger::info("[SettingManager] Saved settings to {} weather files", savedCount);
 }
 
-void SettingsManager::ReloadAllWeatherSettings()
+void SettingManager::ReloadAllWeatherSettings()
 {
 	// Clear existing weather settings
 	weatherSettings.clear();
@@ -432,23 +432,23 @@ void SettingsManager::ReloadAllWeatherSettings()
 	auto& weatherManager = WeatherManager::GetSingleton();
 	weatherManager.Initialize();  // This will reload _weatherlist.ini and all weather files
 
-	logger::info("[SettingsManager] Reloaded all weather settings");
+	logger::info("[SettingManager] Reloaded all weather settings");
 }
 
-void SettingsManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
+void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
 	memcpy(this->timeOfDay1, newTimeOfDay1, sizeof(this->timeOfDay1));
 	memcpy(this->timeOfDay2, newTimeOfDay2, sizeof(this->timeOfDay2));
 	this->interiorFactor = newInteriorFactor;
 }
 
-void SettingsManager::LoadFromFile(const std::string& filePath)
+void SettingManager::LoadFromFile(const std::string& filePath)
 {
 	// Convert to absolute path
 	std::filesystem::path absPath = std::filesystem::absolute(filePath);
 
 	if (!std::filesystem::exists(absPath)) {
-		logger::warn("[SettingsManager] Settings file not found: {}, using defaults", absPath.string());
+		logger::warn("[SettingManager] Settings file not found: {}, using defaults", absPath.string());
 		return;
 	}
 
@@ -461,10 +461,10 @@ void SettingsManager::LoadFromFile(const std::string& filePath)
 	// Load weather ignore settings
 	LoadWeatherIgnoreSettings(absPath.string());
 
-	logger::info("[SettingsManager] Loaded settings from: {}", absPath.string());
+	logger::info("[SettingManager] Loaded settings from: {}", absPath.string());
 }
 
-void SettingsManager::SaveToFile(const std::string& filePath)
+void SettingManager::SaveToFile(const std::string& filePath)
 {
 	for (const auto& [compositeKey, setting] : settings) {
 		if (!setting->hasWeatherSupport) {  // Only save non-weather settings to main file
@@ -475,15 +475,15 @@ void SettingsManager::SaveToFile(const std::string& filePath)
 	// Save weather ignore settings for categories with weather support
 	SaveWeatherIgnoreSettings(filePath);
 
-	logger::info("[SettingsManager] Saved settings to: {}", filePath);
+	logger::info("[SettingManager] Saved settings to: {}", filePath);
 }
 
-std::string SettingsManager::MakeCompositeKey(const std::string& key, const std::string& category) const
+std::string SettingManager::MakeCompositeKey(const std::string& key, const std::string& category) const
 {
 	return category + "::" + key;
 }
 
-SettingValue SettingsManager::InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t)
+SettingValue SettingManager::InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t)
 {
 	if (currentValue.index() != lastValue.index()) {
 		return currentValue;  // Type mismatch, return current
@@ -508,7 +508,7 @@ SettingValue SettingsManager::InterpolateWeatherValues(const SettingValue& curre
 	return currentValue;
 }
 
-TimeOfDayValue SettingsManager::InterpolateTimeOfDayValues(const TimeOfDayValue& a, const TimeOfDayValue& b, float t)
+TimeOfDayValue SettingManager::InterpolateTimeOfDayValues(const TimeOfDayValue& a, const TimeOfDayValue& b, float t)
 {
 	TimeOfDayValue result;
 	result.Dawn = a.Dawn + t * (b.Dawn - a.Dawn);
@@ -522,7 +522,7 @@ TimeOfDayValue SettingsManager::InterpolateTimeOfDayValues(const TimeOfDayValue&
 	return result;
 }
 
-float SettingsManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
+float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 {
 	float result = 0.0f;
 
@@ -543,7 +543,7 @@ float SettingsManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value
 	return result;
 }
 
-void SettingsManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, SettingInfo& setting)
+void SettingManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, SettingInfo& setting)
 {
 	char buffer[256];
 
@@ -552,7 +552,7 @@ void SettingsManager::LoadSettingFromFile(const std::string& filePath, const std
 		{
 			DWORD result = GetPrivateProfileStringA(section.c_str(), key.c_str(), "false", buffer, sizeof(buffer), filePath.c_str());
 			if (result == 0) {
-				logger::warn("[SettingsManager] Failed to load bool setting [{}]::{} from {}", section, key, filePath);
+				logger::warn("[SettingManager] Failed to load bool setting [{}]::{} from {}", section, key, filePath);
 			}
 			std::string valueStr = buffer;
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
@@ -564,7 +564,7 @@ void SettingsManager::LoadSettingFromFile(const std::string& filePath, const std
 			float defaultVal = std::get<float>(setting.defaultValue);
 			DWORD result = GetPrivateProfileStringA(section.c_str(), key.c_str(), std::to_string(defaultVal).c_str(), buffer, sizeof(buffer), filePath.c_str());
 			if (result == 0) {
-				logger::warn("[SettingsManager] Failed to load float setting [{}]::{} from {}", section, key, filePath);
+				logger::warn("[SettingManager] Failed to load float setting [{}]::{} from {}", section, key, filePath);
 			}
 			setting.currentValue = static_cast<float>(atof(buffer));
 			break;
@@ -578,7 +578,7 @@ void SettingsManager::LoadSettingFromFile(const std::string& filePath, const std
 				std::string fullKey = key + timeOfDay;
 				DWORD result = GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), "1.0", buffer, sizeof(buffer), filePath.c_str());
 				if (result == 0) {
-					logger::warn("[SettingsManager] Failed to load TimeOfDay setting [{}]::{} from {}", section, fullKey, filePath);
+					logger::warn("[SettingManager] Failed to load TimeOfDay setting [{}]::{} from {}", section, fullKey, filePath);
 				}
 				timeOfDayValue[timeOfDay] = static_cast<float>(atof(buffer));
 			}
@@ -589,7 +589,7 @@ void SettingsManager::LoadSettingFromFile(const std::string& filePath, const std
 	}
 }
 
-void SettingsManager::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const SettingInfo& setting)
+void SettingManager::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const SettingInfo& setting)
 {
 	char buffer[256];
 
@@ -622,7 +622,7 @@ void SettingsManager::SaveSettingToFile(const std::string& filePath, const std::
 	}
 }
 
-void SettingsManager::SaveWeatherIgnoreSettings(const std::string& filePath)
+void SettingManager::SaveWeatherIgnoreSettings(const std::string& filePath)
 {
 	auto categoriesWithWeather = GetCategoriesWithWeatherSupport();
 
@@ -646,10 +646,10 @@ void SettingsManager::SaveWeatherIgnoreSettings(const std::string& filePath)
 		WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", ignoreWeatherInterior ? "true" : "false", filePath.c_str());
 	}
 
-	logger::debug("[SettingsManager] Saved weather ignore settings for {} categories", categoriesWithWeather.size());
+	logger::debug("[SettingManager] Saved weather ignore settings for {} categories", categoriesWithWeather.size());
 }
 
-void SettingsManager::LoadWeatherIgnoreSettings(const std::string& filePath)
+void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
 	auto categoriesWithWeather = GetCategoriesWithWeatherSupport();
 	char buffer[256];
@@ -662,7 +662,7 @@ void SettingsManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			bool ignoreWeatherSystemValue = (valueStr == "true" || valueStr == "1");
 			this->ignoreWeatherSystem[category] = ignoreWeatherSystemValue;
-			logger::debug("[SettingsManager] Loaded [{}]::IgnoreWeatherSystem = {}", category, ignoreWeatherSystemValue);
+			logger::debug("[SettingManager] Loaded [{}]::IgnoreWeatherSystem = {}", category, ignoreWeatherSystemValue);
 		} else {
 			// Set default value
 			this->ignoreWeatherSystem[category] = false;
@@ -675,63 +675,63 @@ void SettingsManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			bool ignoreWeatherSystemInteriorValue = (valueStr == "true" || valueStr == "1");
 			this->ignoreWeatherSystemInterior[category] = ignoreWeatherSystemInteriorValue;
-			logger::debug("[SettingsManager] Loaded [{}]::IgnoreWeatherSystemInterior = {}", category, ignoreWeatherSystemInteriorValue);
+			logger::debug("[SettingManager] Loaded [{}]::IgnoreWeatherSystemInterior = {}", category, ignoreWeatherSystemInteriorValue);
 		} else {
 			// Set default value
 			this->ignoreWeatherSystemInterior[category] = true;
 		}
 	}
 
-	logger::debug("[SettingsManager] Loaded weather ignore settings for {} categories", categoriesWithWeather.size());
+	logger::debug("[SettingManager] Loaded weather ignore settings for {} categories", categoriesWithWeather.size());
 }
 
-bool SettingsManager::GetIgnoreWeatherSystem(const std::string& category) const
+bool SettingManager::GetIgnoreWeatherSystem(const std::string& category) const
 {
 	auto it = ignoreWeatherSystem.find(category);
 	return (it != ignoreWeatherSystem.end()) ? it->second : false;  // Default to false
 }
 
-bool SettingsManager::GetIgnoreWeatherSystemInterior(const std::string& category) const
+bool SettingManager::GetIgnoreWeatherSystemInterior(const std::string& category) const
 {
 	auto it = ignoreWeatherSystemInterior.find(category);
 	return (it != ignoreWeatherSystemInterior.end()) ? it->second : true;  // Default to true
 }
 
-void SettingsManager::SetIgnoreWeatherSystem(const std::string& category, bool ignore)
+void SettingManager::SetIgnoreWeatherSystem(const std::string& category, bool ignore)
 {
 	ignoreWeatherSystem[category] = ignore;
 }
 
-void SettingsManager::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
+void SettingManager::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
 {
 	ignoreWeatherSystemInterior[category] = ignore;
 }
 
-void SettingsManager::Load()
+void SettingManager::Load()
 {
 	LoadFromFile("enbseries.ini");
 	ReloadAllWeatherSettings();
 
 	EffectManager::GetSingleton().Load();
 
-	logger::info("[SettingsManager] Loaded all settings and effects");
+	logger::info("[SettingManager] Loaded all settings and effects");
 }
 
-void SettingsManager::Save()
+void SettingManager::Save()
 {
 	SaveToFile("enbseries.ini");
 	SaveAllWeatherSettings();
 
 	EffectManager::GetSingleton().Save();
 
-	logger::info("[SettingsManager] Saved all settings and effects");
+	logger::info("[SettingManager] Saved all settings and effects");
 }
 
 // Explicit template instantiations
-template bool SettingsManager::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
-template float SettingsManager::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
-template TimeOfDayValue SettingsManager::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
+template bool SettingManager::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
+template float SettingManager::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
+template TimeOfDayValue SettingManager::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
 
-template void SettingsManager::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
-template void SettingsManager::SetValue<float>(const std::string& key, const std::string& category, const float& value);
-template void SettingsManager::SetValue<TimeOfDayValue>(const std::string& key, const std::string& category, const TimeOfDayValue& value);
+template void SettingManager::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
+template void SettingManager::SetValue<float>(const std::string& key, const std::string& category, const float& value);
+template void SettingManager::SetValue<TimeOfDayValue>(const std::string& key, const std::string& category, const TimeOfDayValue& value);

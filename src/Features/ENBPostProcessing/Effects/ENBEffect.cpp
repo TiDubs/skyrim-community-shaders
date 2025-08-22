@@ -1,6 +1,6 @@
 #include "ENBEffect.h"
 
-#include "../SettingsManager.h"
+#include "../SettingManager.h"
 #include "../TextureManager.h"
 
 void ENBEffect::Execute()
@@ -60,11 +60,11 @@ void ENBEffect::UpdateEffectVariables()
 		Params01->SetRawValue(&params01, 0, sizeof(params01));
 
 	auto& textureManager = TextureManager::GetSingleton();
-	auto& settingsManager = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
 	float4 enbParams01{};
-	enbParams01.x = settingsManager.GetInterpolatedTimeOfDayValue("Amount", "BLOOM");
-	enbParams01.y = settingsManager.GetInterpolatedTimeOfDayValue("Amount", "LENS");
+	enbParams01.x = settingManager.GetInterpolatedTimeOfDayValue("Amount", "BLOOM");
+	enbParams01.y = settingManager.GetInterpolatedTimeOfDayValue("Amount", "LENS");
 
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
@@ -72,6 +72,6 @@ void ENBEffect::UpdateEffectVariables()
 	SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.Get());
 	SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.Get());
 
-	const std::string textureAdaptationName = (settingsManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	const std::string textureAdaptationName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 	SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.Get());
 }

@@ -2,7 +2,7 @@
 
 #include "State.h"
 
-#include "SettingsManager.h"
+#include "SettingManager.h"
 #include "TextureManager.h"
 #include "WeatherManager.h"
 
@@ -54,33 +54,33 @@ void EffectManager::Save()
 
 void EffectManager::RegisterSettings()
 {
-	auto& settingsManager = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
-	settingsManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
-	settingsManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
+	settingManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
+	settingManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
 
-	settingsManager.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 5.0f, false);
-	settingsManager.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
-	settingsManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.0f, 0.0f, 1.0f, false);
-	settingsManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 1.0f, 0.0f, 2.0f, false);
-	settingsManager.RegisterFloatSetting("AdaptationTime", "ADAPTATION", 1.0f, 0.1f, 10.0f, false);
+	settingManager.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 5.0f, false);
+	settingManager.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
+	settingManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.0f, 0.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 1.0f, 0.0f, 2.0f, false);
+	settingManager.RegisterFloatSetting("AdaptationTime", "ADAPTATION", 1.0f, 0.1f, 10.0f, false);
 
-	settingsManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
-	settingsManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
+	settingManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
+	settingManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 
 	TimeOfDayValue defaultBloomAmount;
 	defaultBloomAmount.Dawn = defaultBloomAmount.Sunrise = defaultBloomAmount.Day = 1.0f;
 	defaultBloomAmount.Sunset = defaultBloomAmount.Dusk = defaultBloomAmount.Night = 1.0f;
 	defaultBloomAmount.InteriorDay = defaultBloomAmount.InteriorNight = 1.0f;
 
-	settingsManager.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultBloomAmount, true);
+	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultBloomAmount, true);
 
 	TimeOfDayValue defaultLensAmount;
 	defaultLensAmount.Dawn = defaultLensAmount.Sunrise = defaultLensAmount.Day = 1.0f;
 	defaultLensAmount.Sunset = defaultLensAmount.Dusk = defaultLensAmount.Night = 1.0f;
 	defaultLensAmount.InteriorDay = defaultLensAmount.InteriorNight = 1.0f;
 
-	settingsManager.RegisterTimeOfDaySetting("Amount", "LENS", defaultLensAmount, true);
+	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", defaultLensAmount, true);
 }
 
 void EffectManager::ExecuteEffects()
@@ -587,10 +587,10 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 		return;
 	}
 
-	auto& settingsManager = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
-	auto brightness = settingsManager.GetValue<float>("Brightness", "COLORCORRECTION");
-	auto gammaCurve = settingsManager.GetValue<float>("GammaCurve", "COLORCORRECTION");
+	auto brightness = settingManager.GetValue<float>("Brightness", "COLORCORRECTION");
+	auto gammaCurve = settingManager.GetValue<float>("GammaCurve", "COLORCORRECTION");
 
 	if (brightness == 1.0f && gammaCurve == 1.0f)
 		return;

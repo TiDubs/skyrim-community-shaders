@@ -2,7 +2,7 @@
 
 #include "ENBPostProcessing/EffectManager.h"
 #include "ENBPostProcessing/MenuManager.h"
-#include "ENBPostProcessing/SettingsManager.h"
+#include "ENBPostProcessing/SettingManager.h"
 
 void ENBPostProcessing::SaveSettings(json&)
 {
@@ -27,7 +27,7 @@ void ENBPostProcessing::SetupResources()
 	EffectManager::GetSingleton().Initialize();
 
 	// Load registered settings
-	SettingsManager::GetSingleton().Load();
+	SettingManager::GetSingleton().Load();
 }
 
 void ENBPostProcessing::Reset()
@@ -44,9 +44,9 @@ struct Main_HDRTonemapBlendCinematic_Render
 		effectManager.UpdateCommonData();
 
 		const auto& commonData = effectManager.GetCommonData();
-		auto& settingsManager = SettingsManager::GetSingleton();
-		settingsManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-		settingsManager.SetWeatherBlendFactors(
+		auto& settingManager = SettingManager::GetSingleton();
+		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+		settingManager.SetWeatherBlendFactors(
 			static_cast<uint32_t>(commonData.weather[0]),
 			static_cast<uint32_t>(commonData.weather[1]),
 			commonData.weather[2]);

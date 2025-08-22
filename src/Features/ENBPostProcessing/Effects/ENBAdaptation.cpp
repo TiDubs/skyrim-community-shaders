@@ -2,7 +2,7 @@
 
 #include "../TextureManager.h"
 #include "../EffectManager.h"
-#include "../SettingsManager.h"
+#include "../SettingManager.h"
 #include "../TextureManager.h"
 
 void ENBAdaptation::Execute()
@@ -23,9 +23,9 @@ void ENBAdaptation::Execute()
 	}
 
 	// Use swap mechanism to determine input/output textures
-	auto& settingsManager = SettingsManager::GetSingleton();
-	const std::string texturePreviousName = (settingsManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
-	const std::string textureAdaptationName = (settingsManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	auto& settingManager = SettingManager::GetSingleton();
+	const std::string texturePreviousName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
+	const std::string textureAdaptationName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
 	// Set input texture (previous frame's adaptation value)
 	auto& textureManager = TextureManager::GetSingleton();
@@ -41,15 +41,15 @@ void ENBAdaptation::Execute()
 
 void ENBAdaptation::UpdateEffectVariables()
 {
-	auto& settingsManager = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
-	auto forceMinMaxValues = settingsManager.GetValue<bool>("ForceMinMaxValues", "ADAPTATION");
+	auto forceMinMaxValues = settingManager.GetValue<bool>("ForceMinMaxValues", "ADAPTATION");
 
 	float4 adaptationParameters{};
-	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingsManager.GetValue<float>("AdaptationMin", "ADAPTATION");
-	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingsManager.GetValue<float>("AdaptationMax", "ADAPTATION");
-	adaptationParameters.z = settingsManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
-	adaptationParameters.w = *globals::game::deltaTime / settingsManager.GetValue<float>("AdaptationTime", "ADAPTATION");
+	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingManager.GetValue<float>("AdaptationMin", "ADAPTATION");
+	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingManager.GetValue<float>("AdaptationMax", "ADAPTATION");
+	adaptationParameters.z = settingManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
+	adaptationParameters.w = *globals::game::deltaTime / settingManager.GetValue<float>("AdaptationTime", "ADAPTATION");
 
 	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
 	if (AdaptationParameters && AdaptationParameters->IsValid())

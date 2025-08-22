@@ -80,10 +80,10 @@ struct SettingInfo
 	float maxValue = 10.0f;  // For float settings
 };
 
-class SettingsManager
+class SettingManager
 {
 public:
-	static SettingsManager& GetSingleton();
+	static SettingManager& GetSingleton();
 
 	// Setting registration
 	void RegisterBoolSetting(const std::string& key, const std::string& category,

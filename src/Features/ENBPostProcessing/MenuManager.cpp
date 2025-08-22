@@ -1,7 +1,7 @@
 ﻿#include "MenuManager.h"
 
 #include "EffectManager.h"
-#include "SettingsManager.h"
+#include "SettingManager.h"
 
 MenuManager& MenuManager::GetSingleton()
 {
@@ -39,10 +39,10 @@ void MenuManager::RenderImGui()
 
 void MenuManager::RenderSettingsPanel()
 {
-	auto& settingsManager = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
 	if (ImGui::Button("Load")) {
-		settingsManager.Load();
+		settingManager.Load();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations");
@@ -51,7 +51,7 @@ void MenuManager::RenderSettingsPanel()
 	ImGui::SameLine();
 
 	if (ImGui::Button("Save")) {
-		settingsManager.Save();
+		settingManager.Save();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Save all settings to enbseries.ini, weather files, and effect configurations");
@@ -127,26 +127,26 @@ void MenuManager::RenderWeatherControl()
 
 void MenuManager::RenderAllSettings()
 {
-	auto& settingsRegistry = SettingsManager::GetSingleton();
+	auto& settingManager = SettingManager::GetSingleton();
 
-	auto categories = settingsRegistry.GetAllCategories();
+	auto categories = settingManager.GetAllCategories();
 	for (const auto& category : categories) {
 		if (ImGui::TreeNodeEx(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-			auto settings = settingsRegistry.GetSettingsByCategory(category);
+			auto settings = settingManager.GetSettingsByCategory(category);
 
 			if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
 				// Add weather ignore controls for categories with weather support
-				if (settingsRegistry.CategoryHasWeatherSupport(category)) {
+				if (settingManager.CategoryHasWeatherSupport(category)) {
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
 					ImGui::Text("IgnoreWeatherSystem");
 					ImGui::TableSetColumnIndex(1);
-					bool ignoreWeather = settingsRegistry.GetIgnoreWeatherSystem(category);
+					bool ignoreWeather = settingManager.GetIgnoreWeatherSystem(category);
 					if (ImGui::Checkbox(("##IgnoreWeatherSystem_" + category).c_str(), &ignoreWeather)) {
-						settingsRegistry.SetIgnoreWeatherSystem(category, ignoreWeather);
+						settingManager.SetIgnoreWeatherSystem(category, ignoreWeather);
 					}
 					if (ImGui::IsItemHovered()) {
 						ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for exterior areas");
@@ -156,9 +156,9 @@ void MenuManager::RenderAllSettings()
 					ImGui::TableSetColumnIndex(0);
 					ImGui::Text("IgnoreWeatherSystemInterior");
 					ImGui::TableSetColumnIndex(1);
-					bool ignoreWeatherInterior = settingsRegistry.GetIgnoreWeatherSystemInterior(category);
+					bool ignoreWeatherInterior = settingManager.GetIgnoreWeatherSystemInterior(category);
 					if (ImGui::Checkbox(("##IgnoreWeatherSystemInterior_" + category).c_str(), &ignoreWeatherInterior)) {
-						settingsRegistry.SetIgnoreWeatherSystemInterior(category, ignoreWeatherInterior);
+						settingManager.SetIgnoreWeatherSystemInterior(category, ignoreWeatherInterior);
 					}
 					if (ImGui::IsItemHovered()) {
 						ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for interior areas");
@@ -173,7 +173,7 @@ void MenuManager::RenderAllSettings()
 				}
 
 				for (const auto& settingKey : settings) {
-					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey, category);
+					auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
 					if (!settingInfo)
 						continue;
 
@@ -186,24 +186,24 @@ void MenuManager::RenderAllSettings()
 					switch (settingInfo->type) {
 					case SettingType::Bool:
 						{
-							bool v = settingsRegistry.GetValue<bool>(settingKey, category, true);
+							bool v = settingManager.GetValue<bool>(settingKey, category, true);
 							if (ImGui::Checkbox(("##" + settingKey).c_str(), &v)) {
-								settingsRegistry.SetValue<bool>(settingKey, category, v);
+								settingManager.SetValue<bool>(settingKey, category, v);
 							}
 							break;
 						}
 					case SettingType::Float:
 						{
-							float v = settingsRegistry.GetValue<float>(settingKey, category, true);
+							float v = settingManager.GetValue<float>(settingKey, category, true);
 							if (ImGui::SliderFloat(("##" + settingKey).c_str(), &v, settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
-								settingsRegistry.SetValue<float>(settingKey, category, v);
+								settingManager.SetValue<float>(settingKey, category, v);
 							}
 							break;
 						}
 					case SettingType::TimeOfDay:
 						{
 							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey, category, true);
+							auto v = settingManager.GetValue<TimeOfDayValue>(settingKey, category, true);
 							bool changed = false;
 
 							for (const auto& timeOfDay : timeOfDayNames) {
@@ -218,7 +218,7 @@ void MenuManager::RenderAllSettings()
 							}
 
 							if (changed) {
-								settingsRegistry.SetValue<TimeOfDayValue>(settingKey, category, v);
+								settingManager.SetValue<TimeOfDayValue>(settingKey, category, v);
 							}
 							break;
 						}
