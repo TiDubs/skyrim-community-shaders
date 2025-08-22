@@ -1,7 +1,7 @@
 #include "SettingsManager.h"
 
-#include "WeatherManager.h"
 #include "EffectManager.h"
+#include "WeatherManager.h"
 
 SettingsManager& SettingsManager::GetSingleton()
 {
