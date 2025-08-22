@@ -4,7 +4,6 @@
 #include "ENBDepthOfField.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
-#include "ENBEffectPrePass.h"
 #include "ENBLens.h"
 #include "ENBPostProcessingUI.h"
 #include "ENBSettings.h"
@@ -42,11 +41,10 @@ void EffectManager::RegisterEffects()
 		logger::info("[ENBPP] Registered effect: {}", name);
 	};
 
-	registerEffect(std::make_unique<ENBEffectPrePass>());
 	registerEffect(std::make_unique<ENBDepthOfField>());
-	registerEffect(std::make_unique<ENBAdaptation>());
-	registerEffect(std::make_unique<ENBLens>());
 	registerEffect(std::make_unique<ENBBloom>());
+	registerEffect(std::make_unique<ENBLens>());
+	registerEffect(std::make_unique<ENBAdaptation>());
 	registerEffect(std::make_unique<ENBEffect>());
 	registerEffect(std::make_unique<ENBEffectPostPass>());
 }
