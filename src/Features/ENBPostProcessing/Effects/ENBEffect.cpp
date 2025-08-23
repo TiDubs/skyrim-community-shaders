@@ -66,7 +66,7 @@ void ENBEffect::UpdateEffectVariables()
 
 	if (settingManager.GetValue<bool>("EnableBloom", "EFFECT"))
 		SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.get());
-	
+
 	if (settingManager.GetValue<bool>("EnableLens", "EFFECT"))
 		SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.get());
 
