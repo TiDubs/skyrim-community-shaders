@@ -20,7 +20,7 @@ void ENBAdaptation::Execute()
 		textureCurrent->SetResource(effectTextureCache["TextureCurrent"].srv.get());
 	}
 
-	// Use swap mechanism to determine input/output 
+	// Use swap mechanism to determine input/output
 	const std::string texturePreviousName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
 	const std::string textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
