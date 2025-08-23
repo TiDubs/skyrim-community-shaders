@@ -678,10 +678,6 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 
 void Effect::LoadUIVariables()
 {
-	if (!effect) {
-		return;
-	}
-
 	D3DX11_EFFECT_DESC effectDesc;
 	if (FAILED(effect->GetDesc(&effectDesc))) {
 		return;
@@ -1101,10 +1097,6 @@ void Effect::RenderImGui()
 
 void Effect::EnumerateAllVariables()
 {
-	if (!effect) {
-		return;
-	}
-
 	D3DX11_EFFECT_DESC effectDesc;
 	if (FAILED(effect->GetDesc(&effectDesc))) {
 		return;
@@ -1149,6 +1141,16 @@ bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string&
 }
 
 bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variableName, const void* data, uint32_t size)
+{
+	auto variable = effect->GetVariableByName(variableName.c_str())->AsVector();
+	if (variable && variable->IsValid()) {
+		variable->SetRawValue(data, 0, size);
+		return true;
+	}
+	return false;
+}
+
+bool Effect::SetVectorVariable(const std::string& variableName, const void* data, uint32_t size)
 {
 	auto variable = effect->GetVariableByName(variableName.c_str())->AsVector();
 	if (variable && variable->IsValid()) {

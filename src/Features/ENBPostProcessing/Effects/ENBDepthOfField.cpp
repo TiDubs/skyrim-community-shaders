@@ -44,9 +44,7 @@ void ENBDepthOfField::UpdateEffectVariables()
 	dofParameters.z = (*globals::game::deltaTime) * settingManager.GetValue<float>("ApertureTime", "DEPTHOFFIELD");
 	dofParameters.w = (*globals::game::deltaTime) * settingManager.GetValue<float>("FocusingTime", "DEPTHOFFIELD");
 
-	auto DofParameters = effect->GetVariableByName("DofParameters")->AsVector();
-	if (DofParameters && DofParameters->IsValid())
-		DofParameters->SetRawValue(&dofParameters, 0, sizeof(dofParameters));
+	SetVectorVariable("DofParameters", &dofParameters, sizeof(dofParameters));
 }
 
 void ENBDepthOfField::CreateEffectTextures()

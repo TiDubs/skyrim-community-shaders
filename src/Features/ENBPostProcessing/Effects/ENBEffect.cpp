@@ -20,8 +20,6 @@ void ENBEffect::Execute()
 
 void ENBEffect::UpdateEffectVariables()
 {
-	auto Params01 = effect->GetVariableByName("Params01")->AsVector();
-	auto ENBParams01 = effect->GetVariableByName("ENBParams01")->AsVector();
 
 	float4 params01[7]{};
 
@@ -51,8 +49,7 @@ void ENBEffect::UpdateEffectVariables()
 
 	params01[6] = { 1, 1, 1, 1 };
 
-	if (Params01 && Params01->IsValid())
-		Params01->SetRawValue(&params01, 0, sizeof(params01));
+	SetVectorVariable("Params01", &params01, sizeof(params01));
 
 	auto& textureManager = TextureManager::GetSingleton();
 	auto& settingManager = SettingManager::GetSingleton();
@@ -61,8 +58,7 @@ void ENBEffect::UpdateEffectVariables()
 	enbParams01.x = settingManager.GetInterpolatedTimeOfDayValue("Amount", "BLOOM");
 	enbParams01.y = settingManager.GetInterpolatedTimeOfDayValue("Amount", "LENS");
 
-	if (ENBParams01 && ENBParams01->IsValid())
-		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
+	SetVectorVariable("ENBParams01", &enbParams01, sizeof(enbParams01));
 
 	if (settingManager.GetValue<bool>("EnableBloom", "EFFECT"))
 		SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.get());

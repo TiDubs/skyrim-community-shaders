@@ -37,9 +37,7 @@ void ENBAdaptation::UpdateEffectVariables()
 	adaptationParameters.z = settingManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
 	adaptationParameters.w = settingManager.GetValue<float>("AdaptationTime", "ADAPTATION") * (*globals::game::deltaTime);
 
-	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
-	if (AdaptationParameters && AdaptationParameters->IsValid())
-		AdaptationParameters->SetRawValue(&adaptationParameters, 0, sizeof(adaptationParameters));
+	SetVectorVariable("AdaptationParameters", &adaptationParameters, sizeof(adaptationParameters));
 }
 
 void ENBAdaptation::CreateEffectTextures()
