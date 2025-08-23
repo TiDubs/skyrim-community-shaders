@@ -402,7 +402,7 @@ void EffectManager::UpdateCommonData()
 	// Update timer
 	{
 		auto delta = (*globals::game::deltaTime);
-		
+
 		static double timer = 0.0f;
 		timer += delta;
 

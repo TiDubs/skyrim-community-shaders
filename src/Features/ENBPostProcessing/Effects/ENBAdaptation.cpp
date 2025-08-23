@@ -40,7 +40,7 @@ void ENBAdaptation::UpdateEffectVariables()
 	auto& settingManager = SettingManager::GetSingleton();
 
 	auto forceMinMaxValues = settingManager.GetValue<bool>("ForceMinMaxValues", "ADAPTATION");
-	
+
 	float4 adaptationParameters{};
 	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingManager.GetValue<float>("AdaptationMin", "ADAPTATION");
 	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingManager.GetValue<float>("AdaptationMax", "ADAPTATION");
