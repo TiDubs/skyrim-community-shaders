@@ -7,10 +7,5 @@ CMakeUserPresets.json
 shadertoolsconfig.json
 .vscode
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
 # Folder view configuration files
 **/.DS_Store

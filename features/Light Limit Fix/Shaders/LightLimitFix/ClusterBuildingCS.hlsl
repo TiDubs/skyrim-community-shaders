@@ -5,10 +5,7 @@ cbuffer PerFrame : register(b0)
 	row_major float4x4 InvProjMatrix[2];
 	float LightsNear;
 	float LightsFar;
-	uint pad0[2];  // Padding for 16-byte alignment: 136 -> 144 bytes
 }
-// Validate cbuffer alignment
-VALIDATE_CBUFFER_ALIGNMENT(PerFrame);
 
 float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)
 {

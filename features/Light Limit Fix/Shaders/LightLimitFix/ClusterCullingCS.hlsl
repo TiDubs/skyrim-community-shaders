@@ -3,10 +3,7 @@
 cbuffer PerFrame : register(b0)
 {
 	uint LightCount;
-	uint pad0[3];  // Padding for 16-byte alignment: 4 -> 16 bytes
 }
-// Validate cbuffer alignment
-VALIDATE_CBUFFER_ALIGNMENT(PerFrame);
 
 //references
 //https://github.com/pezcode/Cluster
