@@ -984,7 +984,7 @@ void Effect::RenderImGui()
 		bool valuesChanged = false;
 
 		// Use table
-		if (ImGui::BeginTable(("effect_table_" + GetName()).c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+		if (ImGui::BeginTable(("effect_table_" + GetName()).c_str(), 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 

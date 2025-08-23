@@ -49,6 +49,9 @@ void MenuManager::RenderSettingsPanel()
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations, reload shaders");
 	}
+
+	ImGui::SameLine();
+
 	if (ImGui::Button("Load")) {
 		settingManager.Load();
 		effectManager.Load();
@@ -141,7 +144,7 @@ void MenuManager::RenderAllSettings()
 
 	auto categories = settingManager.GetAllCategories();
 	for (const auto& category : categories) {
-		if (ImGui::TreeNodeEx(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::CollapsingHeader(category.c_str())) {
 			auto settings = settingManager.GetSettingsByCategory(category);
 
 			if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
@@ -237,7 +240,6 @@ void MenuManager::RenderAllSettings()
 
 				ImGui::EndTable();
 			}
-			ImGui::TreePop();
 		}
 	}
 }
