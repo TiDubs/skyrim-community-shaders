@@ -66,7 +66,7 @@ public:
 		float pad6;
 
 		float3 DirectLightingColorFilter;
-		float DirectLightingColorFilterAmount;
+		float pad6_1;
 
 		float AmbientLightingIntensity;
 		float AmbientLightingDesaturation;
@@ -81,7 +81,7 @@ public:
 		float FogCurveMultiplier;
 
 		float3 FogColorFilter;
-		float FogColorFilterAmount;
+		float pad8_1;
 
 		float IBLMultiplicativeAmount;
 		float3 pad9;

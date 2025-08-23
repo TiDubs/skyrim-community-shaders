@@ -49,8 +49,9 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.DirectLightingCurve = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT");
 	data.DirectLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT");
 
-	data.DirectLightingColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT");
-	data.DirectLightingColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT");
+	auto dirLightColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT");
+	auto dirLightColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT");
+	data.DirectLightingColorFilter = (1.0f - dirLightColorFilterAmount) * float3(1.0f) + dirLightColorFilterAmount * dirLightColorFilter;
 	
 	data.AmbientLightingIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
 	data.AmbientLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
@@ -62,8 +63,9 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.FogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
 	data.FogCurveMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT");
 
-	data.FogColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("FogColorFilter", "ENVIRONMENT");
-	data.FogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
+	auto fogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
+	auto fogColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("FogColorFilter", "ENVIRONMENT");
+	data.FogColorFilter = (1.0f - fogColorFilterAmount) * float3(1.0f) + fogColorFilterAmount * fogColorFilter;
 
 	data.IBLMultiplicativeAmount = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 
