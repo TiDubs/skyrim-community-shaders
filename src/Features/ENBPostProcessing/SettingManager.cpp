@@ -58,6 +58,25 @@ void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std:
 	categories[category].settings[key] = setting;
 }
 
+void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const std::string& category,
+	float3 defaultValue, bool hasWeatherSupport)
+{
+	ColorTimeOfDayValue colorTimeOfDayDefault;
+	for (int i = 0; i < ColorTimeOfDayValue::Total; ++i) {
+		colorTimeOfDayDefault.values[i] = defaultValue;
+	}
+
+	Setting setting;
+	setting.key = key;
+	setting.category = category;
+	setting.type = SettingType::ColorTimeOfDay;
+	setting.hasWeatherSupport = hasWeatherSupport;
+	setting.defaultValue = colorTimeOfDayDefault;
+	setting.currentValue = colorTimeOfDayDefault;
+
+	categories[category].settings[key] = setting;
+}
+
 template <typename T>
 T SettingManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
 {
@@ -166,6 +185,12 @@ float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, cons
 {
 	TimeOfDayValue timeOfDayValue = GetValue<TimeOfDayValue>(key, category);
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
+}
+
+float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category)
+{
+	ColorTimeOfDayValue colorTimeOfDayValue = GetValue<ColorTimeOfDayValue>(key, category);
+	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
 }
 
 bool SettingManager::HasSetting(const std::string& key, const std::string& category) const
@@ -417,6 +442,16 @@ SettingValue SettingManager::InterpolateValues(const SettingValue& a, const Sett
 			}
 			return result;
 		}
+	case 3:  // ColorTimeOfDayValue
+		{
+			const auto& valA = std::get<ColorTimeOfDayValue>(a);
+			const auto& valB = std::get<ColorTimeOfDayValue>(b);
+			ColorTimeOfDayValue result;
+			for (int i = 0; i < 8; ++i) {
+				result.values[i] = valA.values[i] + t * (valB.values[i] - valA.values[i]);
+			}
+			return result;
+		}
 	}
 	return b;
 }
@@ -435,6 +470,23 @@ float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 	       timeOfDay1[3] * value.values[TimeOfDayValue::Sunset] +
 	       timeOfDay2[0] * value.values[TimeOfDayValue::Dusk] +
 	       timeOfDay2[1] * value.values[TimeOfDayValue::Night];
+}
+
+float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value)
+{
+	if (interiorFactor > 0.5f) {
+		float dayNightFactor = (timeOfDay1[2] + timeOfDay1[1] + timeOfDay1[0] * 0.5f + timeOfDay1[3] * 0.5f);
+		float3 interiorNight = value.values[ColorTimeOfDayValue::InteriorNight];
+		float3 interiorDay = value.values[ColorTimeOfDayValue::InteriorDay];
+		return interiorNight + dayNightFactor * (interiorDay - interiorNight);
+	}
+
+	return timeOfDay1[0] * value.values[ColorTimeOfDayValue::Dawn] +
+	       timeOfDay1[1] * value.values[ColorTimeOfDayValue::Sunrise] +
+	       timeOfDay1[2] * value.values[ColorTimeOfDayValue::Day] +
+	       timeOfDay1[3] * value.values[ColorTimeOfDayValue::Sunset] +
+	       timeOfDay2[0] * value.values[ColorTimeOfDayValue::Dusk] +
+	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night];
 }
 
 void SettingManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting)
@@ -466,6 +518,39 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			}
 
 			setting.currentValue = timeOfDayValue;
+			break;
+		}
+	case SettingType::ColorTimeOfDay:
+		{
+			ColorTimeOfDayValue colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.defaultValue);
+			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
+			for (int i = 0; i < 8; ++i) {
+				std::string fullKey = key + timeOfDayNames[i];
+				std::string valueStr = IniAPI::GetPrivateProfileString(section, fullKey, "1.0, 1.0, 1.0", filePath);
+				
+				// Parse comma-separated float3 values
+				std::stringstream ss(valueStr);
+				std::string item;
+				std::vector<float> components;
+				
+				while (std::getline(ss, item, ',')) {
+					// Trim whitespace
+					item.erase(0, item.find_first_not_of(" \t"));
+					item.erase(item.find_last_not_of(" \t") + 1);
+					components.push_back(static_cast<float>(atof(item.c_str())));
+				}
+				
+				// Ensure we have exactly 3 components
+				if (components.size() >= 3) {
+					colorTimeOfDayValue.values[i] = { components[0], components[1], components[2] };
+				} else {
+					// Default fallback
+					colorTimeOfDayValue.values[i] = { 1.0f, 1.0f, 1.0f };
+				}
+			}
+
+			setting.currentValue = colorTimeOfDayValue;
 			break;
 		}
 	}
@@ -513,6 +598,19 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				std::string formatted = formatFloat(timeOfDayValue.values[i]);
+				IniAPI::WritePrivateProfileString(section, fullKey, formatted, filePath);
+			}
+			break;
+		}
+	case SettingType::ColorTimeOfDay:
+		{
+			const ColorTimeOfDayValue& colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.currentValue);
+			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
+			for (int i = 0; i < 8; ++i) {
+				std::string fullKey = key + timeOfDayNames[i];
+				const auto& color = colorTimeOfDayValue.values[i];
+				std::string formatted = formatFloat(color.x) + ", " + formatFloat(color.y) + ", " + formatFloat(color.z);
 				IniAPI::WritePrivateProfileString(section, fullKey, formatted, filePath);
 			}
 			break;
@@ -603,7 +701,9 @@ void SettingManager::Save()
 template bool SettingManager::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
 template float SettingManager::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
 template TimeOfDayValue SettingManager::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
+template ColorTimeOfDayValue SettingManager::GetValue<ColorTimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
 
 template void SettingManager::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
 template void SettingManager::SetValue<float>(const std::string& key, const std::string& category, const float& value);
 template void SettingManager::SetValue<TimeOfDayValue>(const std::string& key, const std::string& category, const TimeOfDayValue& value);
+template void SettingManager::SetValue<ColorTimeOfDayValue>(const std::string& key, const std::string& category, const ColorTimeOfDayValue& value);

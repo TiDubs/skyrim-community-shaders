@@ -83,17 +83,21 @@ void EffectManager::RegisterSettings()
 
 	settingManager.RegisterTimeOfDaySetting("GradientTopIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GradientTopCurve", "SKY", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("GradientTopColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("GradientMiddleIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GradientMiddleCurve", "SKY", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("GradientMiddleColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("GradientHorizonIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GradientHorizonCurve", "SKY", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("GradientHorizonColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("CloudsIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("CloudsCurve", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("CloudsDesaturation", "SKY", 0, true);
 	settingManager.RegisterTimeOfDaySetting("CloudsOpacity", "SKY", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("CloudsColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
 	// ENVIRONMENT
 	settingManager.RegisterTimeOfDaySetting("DirectLightingIntensity", "ENVIRONMENT", 1, true);
@@ -103,11 +107,15 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("AmbientLightingIntensity", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("AmbientLightingDesaturation", "ENVIRONMENT", 0, true);
 
+	settingManager.RegisterColorTimeOfDaySetting("DirectLightingColorFilter", "ENVIRONMENT", { 1.0f, 1.0f, 1.0f }, true);
+	settingManager.RegisterTimeOfDaySetting("DirectLightingColorFilterAmount", "ENVIRONMENT", 1, true);
+
 	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogColorCurve", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogAmountMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogCurveMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("FogColorFilter", "ENVIRONMENT", { 1.0f, 1.0f, 1.0f }, true);
 	settingManager.RegisterTimeOfDaySetting("FogColorFilterAmount", "ENVIRONMENT", 0, true);
 
 	settingManager.RegisterTimeOfDaySetting("ColorPow", "ENVIRONMENT", 1, true);
@@ -119,11 +127,13 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Opacity", "VOLUMETRICFOG", 1, true);
+	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "VOLUMETRICFOG", { 1.0f, 1.0f, 1.0f }, true);
 
 	// GAMEVOLUMETRICRAYS
 	settingManager.RegisterTimeOfDaySetting("Intensity", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0, true);
+	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
 }
 
 void EffectManager::ExecuteEffects()

@@ -35,30 +35,45 @@ public:
 		float GradientTopIntensity;
 		float GradientTopCurve;
 
+		float3 GradientTopColorFilter;
+		float pad0;
+
 		float GradientMiddleIntensity;
 		float GradientMiddleCurve;
+		float2 pad1;
+
+		float3 GradientMiddleColorFilter;
+		float pad2;
+
 		float GradientHorizonIntensity;
 		float GradientHorizonCurve;
+		float2 pad3;
+
+		float3 GradientHorizonColorFilter;
+		float pad4;
 
 		float CloudsIntensity;
 		float CloudsCurve;
 		float CloudsDesaturation;
 		float CloudsOpacity;
 
+		float3 CloudsColorFilter;
+		float pad5;
+
 		float DirectLightingIntensity;
 		float DirectLightingCurve;
 		float DirectLightingDesaturation;
-		float pad0;
+		float pad6;
 
 		float3 DirectLightingColorFilter;
 		float DirectLightingColorFilterAmount;
 
 		float AmbientLightingIntensity;
 		float AmbientLightingDesaturation;
-		float2 pad1;
+		float2 pad7;
 
 		float ColorPow;
-		float3 pad2;
+		float3 pad8;
 
 		float FogColorMultiplier;
 		float FogColorCurve;
@@ -69,17 +84,23 @@ public:
 		float FogColorFilterAmount;
 
 		float IBLMultiplicativeAmount;
-		float3 pad3;
+		float3 pad9;
 
 		float VolumetricFogIntensity;
 		float VolumetricFogCurve;
 		float VolumetricFogOpacity;
-		float pad4;
+		float pad10;
+
+		float3 VolumetricFogColorFilter;
+		float pad11;
 
 		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
-		float pad5;
+		float pad12;
+
+		float3 VolumetricRaysColorFilter;
+		float pad13;
 	};
 
 	PerFrame GetCommonBufferData();

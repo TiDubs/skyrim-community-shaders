@@ -4,7 +4,8 @@ enum class SettingType
 {
 	Bool,
 	Float,
-	TimeOfDay
+	TimeOfDay,
+	ColorTimeOfDay
 };
 
 struct TimeOfDayValue
@@ -49,7 +50,52 @@ struct TimeOfDayValue
 	}
 };
 
-using SettingValue = std::variant<bool, float, TimeOfDayValue>;
+struct ColorTimeOfDayValue
+{
+	float3 values[8] = {
+		{ 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f },
+		{ 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }
+	};
+
+	enum Index
+	{
+		Dawn = 0,
+		Sunrise = 1,
+		Day = 2,
+		Sunset = 3,
+		Dusk = 4,
+		Night = 5,
+		InteriorDay = 6,
+		InteriorNight = 7,
+		Total = 8
+	};
+
+	float3& operator[](Index idx) { return values[idx]; }
+	const float3& operator[](Index idx) const { return values[idx]; }
+
+	float3& GetByName(const std::string& name)
+	{
+		if (name == "Dawn")
+			return values[Dawn];
+		if (name == "Sunrise")
+			return values[Sunrise];
+		if (name == "Day")
+			return values[Day];
+		if (name == "Sunset")
+			return values[Sunset];
+		if (name == "Dusk")
+			return values[Dusk];
+		if (name == "Night")
+			return values[Night];
+		if (name == "InteriorDay")
+			return values[InteriorDay];
+		if (name == "InteriorNight")
+			return values[InteriorNight];
+		return values[Dawn];
+	}
+};
+
+using SettingValue = std::variant<bool, float, TimeOfDayValue, ColorTimeOfDayValue>;
 
 struct Setting
 {
@@ -75,6 +121,8 @@ public:
 		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 		float defaultValue, bool hasWeatherSupport = false);
+	void RegisterColorTimeOfDaySetting(const std::string& key, const std::string& category,
+		float3 defaultValue, bool hasWeatherSupport = false);
 
 	template <typename T>
 	T GetValue(const std::string& key, const std::string& category, bool rawValue = false);
@@ -83,6 +131,7 @@ public:
 	void SetValue(const std::string& key, const std::string& category, const T& value);
 
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
+	float3 GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category);
 
 	bool HasSetting(const std::string& key, const std::string& category) const;
 	const Setting* GetSettingInfo(const std::string& key, const std::string& category) const;
@@ -137,6 +186,7 @@ private:
 
 	SettingValue InterpolateValues(const SettingValue& a, const SettingValue& b, float t);
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value);
+	float3 ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value);
 	void LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
 	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting);
 };

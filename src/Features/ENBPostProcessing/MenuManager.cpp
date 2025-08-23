@@ -433,6 +433,64 @@ void MenuManager::RenderAllSettings()
 										}
 										break;
 									}
+								case SettingType::ColorTimeOfDay:
+									{
+										auto v = settingManager.GetValue<ColorTimeOfDayValue>(settingKey, category, true);
+										auto activeIndices = GetActiveTimeOfDayIndices();
+										bool changed = false;
+
+										ImGui::TableNextRow();
+										ImGui::TableSetColumnIndex(0);
+										ImGui::Text("%s", settingKey.c_str());
+										ImGui::TableSetColumnIndex(1);
+
+										// Render all active color pickers horizontally
+										float totalWidth = ImGui::GetContentRegionAvail().x;
+										float colorWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();  // 8px spacing between color pickers
+
+										for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
+											int i = activeIndices[idx];
+
+											if (idx > 0) {
+												ImGui::SameLine(0, 8.0f);  // 8px spacing to match slider spacing
+											}
+
+											// Style the color picker based on activity
+											float blendFactor = GetTimeOfDayBlendFactor(i);
+											bool isActive = blendFactor > 0.0f;
+
+											if (!isActive) {
+												ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+											}
+
+											ImGui::PushItemWidth(colorWidth);
+											std::string id = "##" + settingKey + std::to_string(i);
+											float color[3] = { v.values[i].x, v.values[i].y, v.values[i].z };
+											
+											if (ImGui::ColorEdit3(id.c_str(), color, ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoInputs)) {
+												v.values[i].x = color[0];
+												v.values[i].y = color[1];
+												v.values[i].z = color[2];
+												changed = true;
+											}
+
+											// Add tooltip showing blend factor
+											if (ImGui::IsItemHovered()) {
+												ImGui::SetTooltip("%.0f%%", blendFactor * 100.0f);
+											}
+
+											ImGui::PopItemWidth();
+
+											if (!isActive) {
+												ImGui::PopStyleVar();  // Alpha
+											}
+										}
+
+										if (changed) {
+											settingManager.SetValue<ColorTimeOfDayValue>(settingKey, category, v);
+										}
+										break;
+									}
 								}
 							}
 
