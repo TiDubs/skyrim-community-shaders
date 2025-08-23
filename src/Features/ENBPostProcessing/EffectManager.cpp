@@ -74,19 +74,61 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 	settingManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 
-	TimeOfDayValue defaultBloomAmount;
-	defaultBloomAmount.Dawn = defaultBloomAmount.Sunrise = defaultBloomAmount.Day = 1.0f;
-	defaultBloomAmount.Sunset = defaultBloomAmount.Dusk = defaultBloomAmount.Night = 1.0f;
-	defaultBloomAmount.InteriorDay = defaultBloomAmount.InteriorNight = 1.0f;
+	TimeOfDayValue defaultTODValue;
+	defaultTODValue.Dawn = defaultTODValue.Sunrise = defaultTODValue.Day = 1.0f;
+	defaultTODValue.Sunset = defaultTODValue.Dusk = defaultTODValue.Night = 1.0f;
+	defaultTODValue.InteriorDay = defaultTODValue.InteriorNight = 1.0f;
 
-	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultBloomAmount, true);
+	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", defaultTODValue, true);
 
-	TimeOfDayValue defaultLensAmount;
-	defaultLensAmount.Dawn = defaultLensAmount.Sunrise = defaultLensAmount.Day = 1.0f;
-	defaultLensAmount.Sunset = defaultLensAmount.Dusk = defaultLensAmount.Night = 1.0f;
-	defaultLensAmount.InteriorDay = defaultLensAmount.InteriorNight = 1.0f;
+	// SKY
+	settingManager.RegisterTimeOfDaySetting("GradientIntensity", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("GradientDesaturation", "SKY", defaultTODValue, true);
 
-	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", defaultLensAmount, true);
+	settingManager.RegisterTimeOfDaySetting("GradientTopIntensity", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("GradientTopCurve", "SKY", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("GradientMiddleIntensity", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("GradientMiddleCurve", "SKY", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("GradientHorizonIntensity", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("GradientHorizonCurve", "SKY", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("CloudsIntensity", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsCurve", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsDesaturation", "SKY", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsOpacity", "SKY", defaultTODValue, true);
+
+	// ENVIRONMENT
+	settingManager.RegisterTimeOfDaySetting("DirectLightingIntensity", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("DirectLightingCurve", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("DirectLightingDesaturation", "ENVIRONMENT", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("AmbientLightingIntensity", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("AmbientLightingDesaturation", "ENVIRONMENT", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("FogColorCurve", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("FogAmountMultiplier", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("FogCurveMultiplier", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("FogColorFilterAmount", "ENVIRONMENT", defaultTODValue, true);
+
+	settingManager.RegisterTimeOfDaySetting("ColorPow", "ENVIRONMENT", defaultTODValue, true);
+
+	// IMAGEBASEDLIGHTING
+	settingManager.RegisterTimeOfDaySetting("MultiplicativeAmount", "IMAGEBASEDLIGHTING", defaultTODValue, true);
+
+	// VOLUMETRICFOG
+	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("Opacity", "VOLUMETRICFOG", defaultTODValue, true);
+
+	// GAMEVOLUMETRICRAYS
+	settingManager.RegisterTimeOfDaySetting("Intensity", "GAMEVOLUMETRICRAYS", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", defaultTODValue, true);
+	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", defaultTODValue, true);
 }
 
 void EffectManager::ExecuteEffects()

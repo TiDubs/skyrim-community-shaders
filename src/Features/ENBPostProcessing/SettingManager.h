@@ -102,7 +102,6 @@ public:
 
 	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
 	float GetInterpolatedTimeOfDayValue(const std::string& key);
-
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 
 	// Setting queries
