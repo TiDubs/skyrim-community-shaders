@@ -54,7 +54,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	
 	data.AmbientLightingIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
 	data.AmbientLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
-	
+
 	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 
 	data.FogColorMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogColorMultiplier", "ENVIRONMENT");
@@ -64,7 +64,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.FogColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("FogColorFilter", "ENVIRONMENT");
 	data.FogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
-	
+
 	data.IBLMultiplicativeAmount = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 
 	data.VolumetricFogIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG");
