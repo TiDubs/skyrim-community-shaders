@@ -11,6 +11,5 @@ void ENBEffectPostPass::Execute()
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), textureSDRTemp->srv.get(), *textureSDRTemp2, *textureSDRTemp);
 
-	// TODO: Do this cleaner
 	globals::d3d::context->CopyResource(textureSDRTemp->texture.get(), textureSDRTemp2->texture.get());
 }
