@@ -473,7 +473,8 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 		std::string result = temp;
 		
 		// Remove trailing zeros
-		while (result.length() > 1 && result.back() == '0') {				result.pop_back();
+		while (result.length() > 1 && result.back() == '0') {	
+			result.pop_back();
 		}
 		
 		// Ensure at least one decimal place (add .0 if needed)
