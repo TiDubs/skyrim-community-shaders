@@ -28,6 +28,62 @@ public:
 		};
 	}
 
+	struct alignas(16) PerFrame
+	{
+		float GradientIntensity;
+		float GradientDesaturation;
+		float GradientTopIntensity;
+		float GradientTopCurve;
+
+		float GradientMiddleIntensity;
+		float GradientMiddleCurve;
+		float GradientHorizonIntensity;
+		float GradientHorizonCurve;
+
+		float CloudsIntensity;
+		float CloudsCurve;
+		float CloudsDesaturation;
+		float CloudsOpacity;
+
+		float DirectLightingIntensity;
+		float DirectLightingCurve;
+		float DirectLightingDesaturation;
+		float pad0;
+
+		float3 DirectLightingColorFilter;
+		float DirectLightingColorFilterAmount;
+
+		float AmbientLightingIntensity;
+		float AmbientLightingDesaturation;
+		float2 pad1;
+
+		float ColorPow;
+		float3 pad2;
+
+		float FogColorMultiplier;
+		float FogColorCurve;
+		float FogAmountMultiplier;
+		float FogCurveMultiplier;
+
+		float3 FogColorFilter;
+		float FogColorFilterAmount;
+
+		float IBLMultiplicativeAmount;
+		float3 pad3;
+
+		float VolumetricFogIntensity;
+		float VolumetricFogCurve;
+		float VolumetricFogOpacity;
+		float pad4;
+
+		float VolumetricRaysIntensity;
+		float VolumetricRaysRangeFactor;
+		float VolumetricRaysDesaturation;
+		float pad5;
+	};
+
+	PerFrame GetCommonBufferData();
+
 	virtual void SaveSettings(json&) override;
 	virtual void LoadSettings(json&) override;
 	virtual void RestoreDefaultSettings() override;

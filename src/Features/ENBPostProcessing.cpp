@@ -16,6 +16,54 @@ void ENBPostProcessing::RestoreDefaultSettings()
 {
 }
 
+ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
+{
+	auto& settingManager = SettingManager::GetSingleton();
+	PerFrame data{};
+
+	data.GradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
+	data.GradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
+	data.GradientTopIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientTopIntensity", "SKY");
+	data.GradientTopCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientTopCurve", "SKY");
+
+	data.GradientMiddleIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleIntensity", "SKY");
+	data.GradientMiddleCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleCurve", "SKY");
+	data.GradientHorizonIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonIntensity", "SKY");
+	data.GradientHorizonCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonCurve", "SKY");
+
+	data.CloudsIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsIntensity", "SKY");
+	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
+	data.CloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
+	data.CloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
+
+	data.DirectLightingIntensity = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT");
+	data.DirectLightingCurve = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT");
+	data.DirectLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT");
+	
+	data.AmbientLightingIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
+	data.AmbientLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
+	
+	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
+
+	data.FogColorMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogColorMultiplier", "ENVIRONMENT");
+	data.FogColorCurve = settingManager.GetInterpolatedTimeOfDayValue("FogColorCurve", "ENVIRONMENT");
+	data.FogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
+	data.FogCurveMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT");
+	data.FogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
+	
+	data.IBLMultiplicativeAmount = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+
+	data.VolumetricFogIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG");
+	data.VolumetricFogCurve = settingManager.GetInterpolatedTimeOfDayValue("Curve", "VOLUMETRICFOG");
+	data.VolumetricFogOpacity = settingManager.GetInterpolatedTimeOfDayValue("Opacity", "VOLUMETRICFOG");
+
+	data.VolumetricRaysIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "GAMEVOLUMETRICRAYS");
+	data.VolumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
+	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
+
+	return data;
+}
+
 void ENBPostProcessing::DrawSettings()
 {
 	MenuManager::GetSingleton().RenderImGui();
