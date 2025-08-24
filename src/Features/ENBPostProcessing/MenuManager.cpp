@@ -102,6 +102,42 @@ void MenuManager::RenderWeatherControl()
 		ImGui::Text("%s", activeTimesText.c_str());
 	}
 
+	// Current time of day values
+	ImGui::Separator();
+	ImGui::Text("Time of Day Values:");
+	if (ImGui::BeginTable("TimeOfDayValues", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
+		ImGui::TableSetupColumn("Period", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Array", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableHeadersRow();
+
+		// Display timeOfDay1 values
+		const char* tod1Names[] = {"Dawn", "Sunrise", "Day", "Sunset"};
+		for (int i = 0; i < 4; ++i) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", tod1Names[i]);
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%.3f", effectManager.commonData.timeOfDay1[i]);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::Text("timeOfDay1[%d]", i);
+		}
+
+		// Display timeOfDay2 values
+		const char* tod2Names[] = {"Dusk", "Night", "InteriorDay", "InteriorNight"};
+		for (int i = 0; i < 4; ++i) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", tod2Names[i]);
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%.3f", effectManager.commonData.timeOfDay2[i]);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::Text("timeOfDay2[%d]", i);
+		}
+
+		ImGui::EndTable();
+	}
+
 	// Weather file list
 	if (ImGui::TreeNodeEx("Weather Files", ImGuiTreeNodeFlags_DefaultOpen)) {
 		const auto& weatherEntries = weatherManager.GetWeatherEntries();
@@ -156,6 +192,7 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 	// Global Settings - Master controls and basic adjustments
 	categorizedSettings["Main"] = {
 		"GLOBAL",
+		"TIMEOFDAY",
 		"COLORCORRECTION",
 		"EFFECT",
 		"DEPTHOFFIELD"

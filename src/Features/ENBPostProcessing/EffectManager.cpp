@@ -7,6 +7,7 @@
 #include "WeatherManager.h"
 
 #include <d3dcompiler.h>
+#include <vector>
 
 EffectManager& EffectManager::GetSingleton()
 {
@@ -55,6 +56,14 @@ void EffectManager::Save()
 void EffectManager::RegisterSettings()
 {
 	auto& settingManager = SettingManager::GetSingleton();
+
+	// Time of day settings
+	settingManager.RegisterFloatSetting("DawnDuration", "TIMEOFDAY", 1.6f, 0.1f, 12.0f, false);
+	settingManager.RegisterFloatSetting("SunriseTime", "TIMEOFDAY", 9.0f, 0.0f, 24.0f, false);
+	settingManager.RegisterFloatSetting("DayTime", "TIMEOFDAY", 12.0f, 0.0f, 24.0f, false);
+	settingManager.RegisterFloatSetting("SunsetTime", "TIMEOFDAY", 17.25f, 0.0f, 24.0f, false);
+	settingManager.RegisterFloatSetting("DuskDuration", "TIMEOFDAY", 2.0f, 0.1f, 12.0f, false);
+	settingManager.RegisterFloatSetting("NightTime", "TIMEOFDAY", 1.0f, 0.0f, 24.0f, false);
 
 	settingManager.RegisterBoolSetting("EnablePostPassShader", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableAdaptation", "EFFECT", true, false);
@@ -402,7 +411,7 @@ void EffectManager::CreateColorCorrectionShader()
 		void main(uint3 id : SV_DispatchThreadID)
 		{
 			float4 color = OutputTexture[id.xy];
-			color.rgb = lerp(color.rgb * color.rgb, color.rgb, GammaCurve);
+			color.rgb = pow(color.rgb, GammaCurve);
 			color.rgb *= Brightness;
 			OutputTexture[id.xy] = color;
 		}
@@ -491,76 +500,103 @@ void EffectManager::UpdateCommonData()
 
 	// Update time of day
 	{
-		float currentTime = sky->currentGameHour;
+		auto& settingManager = SettingManager::GetSingleton();
+		
+		// Clamp current time to valid range
+		float currentTime = std::clamp(sky->currentGameHour, 0.0f, 24.0f);
 
-		float sunriseBegin = sky->GetSunriseBegin();
-		float sunriseEnd = sky->GetSunriseEnd();
-		float sunsetBegin = sky->GetSunsetBegin();
-		float sunsetEnd = sky->GetSunsetEnd();
+		// Load time of day settings
+		const float nightTime = settingManager.GetValue<float>("NightTime", "TIMEOFDAY");
+		const float sunriseTime = settingManager.GetValue<float>("SunriseTime", "TIMEOFDAY");
+		const float dawnDuration = settingManager.GetValue<float>("DawnDuration", "TIMEOFDAY");
+		const float dayTime = settingManager.GetValue<float>("DayTime", "TIMEOFDAY");
+		const float sunsetTime = settingManager.GetValue<float>("SunsetTime", "TIMEOFDAY");
+		const float duskDuration = settingManager.GetValue<float>("DuskDuration", "TIMEOFDAY");
 
-		float dawnMid = sunriseBegin + (sunriseEnd - sunriseBegin) * 0.5f;
-		float duskMid = sunsetBegin + (sunsetEnd - sunsetBegin) * 0.5f;
-
-		auto range01 = [](float t, float a, float b) {
-			// Handles wrap-around if b < a
-			float range = b - a;
-			if (range < 0.0f)
-				range += 24.0f;
-			float value = t - a;
-			if (value < 0.0f)
-				value += 24.0f;
-			return std::clamp(value / range, 0.0f, 1.0f);
-		};
-
-		// Initialize to zero
-		commonData.timeOfDay1[0] = commonData.timeOfDay1[1] = commonData.timeOfDay1[2] = commonData.timeOfDay1[3] = 0.0f;
-		commonData.timeOfDay2[0] = commonData.timeOfDay2[1] = commonData.timeOfDay2[2] = commonData.timeOfDay2[3] = 0.0f;
-
-		// Dawn → Sunrise
-		if (currentTime >= sunriseBegin && currentTime < dawnMid) {
-			float f = range01(currentTime, sunriseBegin, dawnMid);
-			commonData.timeOfDay1[0] = 1.0f - f;  // dawn
-			commonData.timeOfDay1[1] = f;         // sunrise
-		} else if (currentTime >= dawnMid && currentTime < sunriseEnd) {
-			float f = range01(currentTime, dawnMid, sunriseEnd);
-			commonData.timeOfDay1[1] = 1.0f - f;  // sunrise
-			commonData.timeOfDay1[2] = f;         // day
-		}
-		// Day → Sunset
-		else if (currentTime >= sunriseEnd && currentTime < sunsetBegin) {
-			float f = range01(currentTime, sunriseEnd, sunsetBegin);
-			commonData.timeOfDay1[2] = 1.0f - f;  // day
-			commonData.timeOfDay1[3] = f;         // sunset
-		}
-		// Sunset → Dusk
-		else if (currentTime >= sunsetBegin && currentTime < duskMid) {
-			float f = range01(currentTime, sunsetBegin, duskMid);
-			commonData.timeOfDay1[3] = 1.0f - f;  // sunset
-			commonData.timeOfDay2[0] = f;         // dusk
-		} else if (currentTime >= duskMid && currentTime < sunsetEnd) {
-			float f = range01(currentTime, duskMid, sunsetEnd);
-			commonData.timeOfDay2[0] = 1.0f - f;  // dusk
-			commonData.timeOfDay2[1] = f;         // night
-		}
-		// Night → Dawn (wrap)
-		else {
-			float f = range01(currentTime, sunsetEnd, sunriseBegin);
-			commonData.timeOfDay2[1] = 1.0f - f;  // night
-			commonData.timeOfDay1[0] = f;         // dawn
-		}
-	}
-
-	// Update night/day factor
-	{
-		commonData.eNightDayFactor = std::fabs(sky->currentGameHour - 12.0f);
-		if (commonData.eNightDayFactor > 12.0f)
-			commonData.eNightDayFactor = 24.0f - commonData.eNightDayFactor;
-		commonData.eNightDayFactor = 1.0f - commonData.eNightDayFactor / 12.0f;
-	}
-
-	// Update interior factor
-	{
 		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
+
+		// Initialize and set factors
+		float factors[6] = { 0.0f };  // dawn, sunrise, day, sunset, dusk, night
+
+		if (!commonData.eInteriorFactor) {
+			// Calculate transition points
+			const float dawnStart = sunriseTime - dawnDuration;
+			const float dawnMid = sunriseTime - (dawnDuration * 0.5f);
+			const float sunsetMid = sunsetTime + (duskDuration * 0.5f);
+			const float duskEnd = sunsetTime + duskDuration;
+
+			// Time points array with 24h wraparound
+			const float timePoints[] = {
+				nightTime, dawnStart, dawnMid, sunriseTime, dayTime, sunsetTime, sunsetMid, duskEnd,
+				nightTime + 24.0f, dawnStart + 24.0f, dawnMid + 24.0f, sunriseTime + 24.0f,
+				dayTime + 24.0f, sunsetTime + 24.0f, sunsetMid + 24.0f, duskEnd + 24.0f
+			};
+
+			// Find current and next time periods
+			int currentIdx = 0, nextIdx = 0;
+			float currentPeriodTime = 0.0f, nextPeriodTime = 24.0f;
+
+			for (int i = 0; i < 16; i++) {
+				const float t = timePoints[i];
+				if (currentTime >= t && t >= currentPeriodTime) {
+					currentIdx = i;
+					currentPeriodTime = t;
+				}
+				if (t > currentTime && nextPeriodTime >= t) {
+					nextIdx = i;
+					nextPeriodTime = t;
+				}
+			}
+
+			// Map time point indices to time of day factors
+			constexpr int factorMapping[] = { 5, 0, 0, 1, 2, 3, 4, 5 };  // night, dawn, dawn, sunrise, day, sunset, dusk, night
+			const int currentFactor = factorMapping[currentIdx % 8];
+			const int nextFactor = factorMapping[nextIdx % 8];
+
+			// Calculate blend weight
+			float timeDiff = std::abs(nextPeriodTime - currentPeriodTime);
+			if (timeDiff == 0.0f) timeDiff = 1.0f;
+
+			const float blend = std::abs(currentTime - currentPeriodTime) / timeDiff;
+
+			if (currentFactor == nextFactor) {
+				factors[currentFactor] = 1.0f;
+			} else {
+				factors[currentFactor] = std::clamp(1.0f - blend, 0.0f, 1.0f);
+				factors[nextFactor] = std::clamp(blend, 0.0f, 1.0f);
+			}
+
+			// Assign to output arrays
+			commonData.timeOfDay1[0] = factors[0];  // dawn
+			commonData.timeOfDay1[1] = factors[1];  // sunrise
+			commonData.timeOfDay1[2] = factors[2];  // day
+			commonData.timeOfDay1[3] = factors[3];  // sunset
+			commonData.timeOfDay2[0] = factors[4];  // dusk
+			commonData.timeOfDay2[1] = factors[5];  // night
+		}
+
+		// Calculate distance to night time (handling 24h wraparound)
+		float distToNight = std::abs(currentTime - nightTime);
+		if (distToNight > 12.0f) {
+			distToNight = 24.0f - distToNight;
+		}
+
+		// Calculate distance to day time (handling 24h wraparound)
+		float distToDay = std::abs(currentTime - dayTime);
+		if (distToDay > 12.0f) {
+			distToDay = 24.0f - distToDay;
+		}
+
+		// Night/day factor: 0.0 = pure night, 1.0 = pure day
+		// Based on relative proximity to day vs night times
+		if (distToNight + distToDay > 0.0f) {
+			commonData.eNightDayFactor = distToNight / (distToNight + distToDay);
+		} else {
+			commonData.eNightDayFactor = 0.5f;  // Fallback if both distances are 0
+		}
+
+		commonData.timeOfDay2[2] = commonData.eInteriorFactor * commonData.eNightDayFactor;			  // interior day
+		commonData.timeOfDay2[3] = commonData.eInteriorFactor * (1.0f - commonData.eNightDayFactor);  // interior night
 	}
 }
 
