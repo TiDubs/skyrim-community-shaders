@@ -273,100 +273,6 @@ void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const st
 	}
 }
 
-void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
-{
-	std::string weatherIDStr = weatherKey.substr(8);  // Remove "weather_" prefix
-	uint32_t weatherID = std::stoul(weatherIDStr);
-
-	auto weatherIt = weatherData.find(weatherID);
-	if (weatherIt == weatherData.end()) {
-		logger::warn("[SettingManager] No weather settings found for key: {}", weatherKey);
-		return;
-	}
-
-	std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
-
-	for (const auto& [settingKey, value] : weatherIt->second) {
-		size_t pos = settingKey.find("::");
-		if (pos == std::string::npos)
-			continue;
-
-		std::string category = settingKey.substr(0, pos);
-		std::string key = settingKey.substr(pos + 2);
-
-		auto categoryIt = categories.find(category);
-		if (categoryIt == categories.end())
-			continue;
-
-		auto keyIt = categoryIt->second.settings.find(key);
-		if (keyIt == categoryIt->second.settings.end())
-			continue;
-
-		Setting tempSetting = keyIt->second;
-		tempSetting.currentValue = value;
-		SaveSettingToFile(filePath, category, key, tempSetting);
-	}
-
-	logger::debug("[SettingManager] Saved weather settings to: {}", filePath);
-}
-
-void SettingManager::SaveAllWeatherSettings()
-{
-	auto& weatherManager = WeatherManager::GetSingleton();
-	const auto& weatherEntries = weatherManager.GetWeatherEntries();
-
-	if (weatherEntries.empty()) {
-		logger::warn("[SettingManager] No weather entries found, skipping weather file save");
-		return;
-	}
-
-	int savedCount = 0;
-	for (const auto& [sectionName, entry] : weatherEntries) {
-		std::string weatherFilePath = "enbseries/" + entry.fileName;
-		std::filesystem::create_directories(std::filesystem::path(weatherFilePath).parent_path());
-
-		if (!entry.weatherIDs.empty()) {
-			uint32_t weatherID = entry.weatherIDs[0];
-			auto weatherIt = weatherData.find(weatherID);
-
-			if (weatherIt != weatherData.end()) {
-				for (const auto& [settingKey, value] : weatherIt->second) {
-					size_t pos = settingKey.find("::");
-					if (pos == std::string::npos)
-						continue;
-
-					std::string category = settingKey.substr(0, pos);
-					std::string key = settingKey.substr(pos + 2);
-
-					auto categoryIt = categories.find(category);
-					if (categoryIt == categories.end())
-						continue;
-
-					auto keyIt = categoryIt->second.settings.find(key);
-					if (keyIt == categoryIt->second.settings.end())
-						continue;
-
-					Setting tempSetting = keyIt->second;
-					tempSetting.currentValue = value;
-					SaveSettingToFile(weatherFilePath, category, key, tempSetting);
-				}
-			} else {
-				for (const auto& [category, categoryData] : categories) {
-					for (const auto& [key, setting] : categoryData.settings) {
-						if (setting.hasWeatherSupport) {
-							SaveSettingToFile(weatherFilePath, category, key, setting);
-						}
-					}
-				}
-			}
-		}
-
-		savedCount++;
-	}
-
-	logger::info("[SettingManager] Saved settings to {} weather files", savedCount);
-}
-
 void SettingManager::ReloadAllWeatherSettings()
 {
 	weatherData.clear();
@@ -410,8 +316,6 @@ void SettingManager::SaveToFile(const std::string& filePath)
 			}
 		}
 	}
-
-	SaveWeatherIgnoreSettings(filePath);
 }
 
 SettingValue SettingManager::InterpolateValues(const SettingValue& a, const SettingValue& b, float t)
@@ -623,28 +527,6 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	}
 }
 
-void SettingManager::SaveWeatherIgnoreSettings(const std::string& filePath)
-{
-	int count = 0;
-	for (const auto& [category, categoryData] : categories) {
-		bool hasWeatherSupport = false;
-		for (const auto& [key, setting] : categoryData.settings) {
-			if (setting.hasWeatherSupport) {
-				hasWeatherSupport = true;
-				break;
-			}
-		}
-
-		if (hasWeatherSupport) {
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem",
-				categoryData.ignoreWeatherSystem ? "true" : "false", filePath.c_str());
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior",
-				categoryData.ignoreWeatherSystemInterior ? "true" : "false", filePath.c_str());
-			count++;
-		}
-	}
-}
-
 void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
 	for (auto& [category, categoryData] : categories) {
@@ -703,7 +585,6 @@ void SettingManager::Load()
 void SettingManager::Save()
 {
 	SaveToFile("enbseries.ini");
-	SaveAllWeatherSettings();
 }
 
 

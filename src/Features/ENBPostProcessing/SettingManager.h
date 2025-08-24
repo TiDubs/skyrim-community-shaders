@@ -155,7 +155,6 @@ public:
 	void Save();
 
 	// Weather ignore settings management
-	void SaveWeatherIgnoreSettings(const std::string& filePath);
 	void LoadWeatherIgnoreSettings(const std::string& filePath);
 	bool GetIgnoreWeatherSystem(const std::string& category) const;
 	bool GetIgnoreWeatherSystemInterior(const std::string& category) const;
