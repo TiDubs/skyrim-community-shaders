@@ -938,12 +938,32 @@ void Upscaling::UpdateSharedResources()
 
 	if (!needsSharedBasics) {
 		// Clean up all resources when nothing is needed
-		if (inputColorBufferShared12) { delete inputColorBufferShared12; inputColorBufferShared12 = nullptr; }
-		if (outputColorBufferShared12) { delete outputColorBufferShared12; outputColorBufferShared12 = nullptr; }
-		if (reactiveMaskShared12) { delete reactiveMaskShared12; reactiveMaskShared12 = nullptr; }
-		if (transparencyCompositionMaskShared12) { delete transparencyCompositionMaskShared12; transparencyCompositionMaskShared12 = nullptr; }
-		if (depthBufferShared12) { delete depthBufferShared12; depthBufferShared12 = nullptr; }
-		if (motionVectorBufferShared12) { delete motionVectorBufferShared12; motionVectorBufferShared12 = nullptr; }
+		if (inputColorBufferShared12) {
+			delete inputColorBufferShared12;
+			inputColorBufferShared12 = nullptr;
+		}
+		if (outputColorBufferShared12) {
+			delete outputColorBufferShared12;
+			outputColorBufferShared12 = nullptr;
+		}
+		if (reactiveMaskShared12) {
+			delete reactiveMaskShared12;
+			reactiveMaskShared12 = nullptr;
+		}
+		if (transparencyCompositionMaskShared12) {
+			delete transparencyCompositionMaskShared12;
+			transparencyCompositionMaskShared12 = nullptr;
+		}
+		if (!d3d12Interop) {
+			if (depthBufferShared12) {
+				delete depthBufferShared12;
+				depthBufferShared12 = nullptr;
+			}
+			if (motionVectorBufferShared12) {
+				delete motionVectorBufferShared12;
+				motionVectorBufferShared12 = nullptr;
+			}
+		}
 		copyDepthToSharedBufferPS = nullptr;
 		return;
 	}
@@ -1005,7 +1025,7 @@ void Upscaling::UpdateSharedResources()
 		if (!copyDepthToSharedBufferPS) {
 			copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 		}
-	} else {
+	} else if (!d3d12Interop){
 		if (depthBufferShared12) { delete depthBufferShared12; depthBufferShared12 = nullptr; }
 		if (motionVectorBufferShared12) { delete motionVectorBufferShared12; motionVectorBufferShared12 = nullptr; }
 		copyDepthToSharedBufferPS = nullptr;
