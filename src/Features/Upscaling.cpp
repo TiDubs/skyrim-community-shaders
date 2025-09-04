@@ -62,13 +62,15 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
 
-	// Use better swap effect to prevent tearing and improve performance
-	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	 
-	// Set new more precise format
-	pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	if (!globals::game::isVR) {
+		// Use better swap effect to prevent tearing and improve performance
+		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-	bool shouldProxy = !REL::Module::IsVR();
+		// Set new more precise format
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	}
+
+	bool shouldProxy = !globals::game::isVR;
 	if (shouldProxy)
 		if (!pSwapChainDesc->Windowed)
 			shouldProxy = false;
@@ -88,7 +90,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			shouldProxy = false;
 	}
 
-	upscaling.lowRefreshRate = refreshRate < 119;
+	upscaling.lowRefreshRate = refreshRate < 120;
 	upscaling.isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
