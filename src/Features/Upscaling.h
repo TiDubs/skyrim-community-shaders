@@ -128,6 +128,7 @@ public:
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
+	Texture2D* motionVectorCopyTexture = nullptr;
 
 	virtual void ClearShaderCache() override;
 
@@ -165,7 +166,7 @@ public:
 
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopyFrameGenerationResources();
-	void CopySharedD3D12Resources(bool a_upscale);
+	void CopySharedD3D12Resources(bool a_upscaling);
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();

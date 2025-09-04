@@ -493,6 +493,21 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 		}
+
+		if (!motionVectorCopyTexture) {
+			auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+			
+			D3D11_TEXTURE2D_DESC motionTexDesc{};
+			motionVector.texture->GetDesc(&motionTexDesc);
+
+			texDesc.Format = motionTexDesc.Format;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			motionVectorCopyTexture = new Texture2D(texDesc);
+			motionVectorCopyTexture->CreateSRV(srvDesc);
+			motionVectorCopyTexture->CreateUAV(uavDesc);
+		}
 	}
 
 	// Update shared D3D12 resources based on current requirements
@@ -522,6 +537,15 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
+		}
+
+		if (motionVectorCopyTexture) {
+			motionVectorCopyTexture->srv = nullptr;
+			motionVectorCopyTexture->uav = nullptr;
+			motionVectorCopyTexture->resource = nullptr;
+
+			delete motionVectorCopyTexture;
+			motionVectorCopyTexture = nullptr;
 		}
 	}
 
@@ -996,22 +1020,21 @@ void Upscaling::CopyFrameGenerationResources()
 	CopySharedD3D12Resources(false);
 }
 
-void Upscaling::CopySharedD3D12Resources(bool a_upscale)
+void Upscaling::CopySharedD3D12Resources(bool a_upscaling)
 {
-	if (!a_upscale) {
-		if (!d3d12Interop || !settings.frameGenerationMode)
-			return;
-	}
-
 	// Only copy once per frame for all upscaling systems (XeSS, Frame Generation, etc.)
 	if (!sharedResourcesFrameChecker.IsNewFrame())
 		return;
+
+	auto upscaleMethod = GetUpscaleMethod();
 
 	globals::state->BeginPerfEvent("Copy Shared D3D12 Resources");
 
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
-
+	
+	// Not required by XeSS
+	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12Interop && settings.frameGenerationMode && !(upscaleMethod == UpscaleMethod::kXESS && a_upscaling)))
 	{
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
@@ -1028,6 +1051,7 @@ void Upscaling::CopySharedD3D12Resources(bool a_upscale)
 		context->CopySubresourceRegion(motionVectorBufferShared12->resource11, 0, 0, 0, 0, motionVector.texture, 0, &srcBox);
 	}
 
+	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS || d3d12Interop && settings.frameGenerationMode)
 	{
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
@@ -1336,13 +1360,16 @@ void Upscaling::Upscale()
 
 		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
 		auto& normals = renderer->GetRuntimeData().renderTargets[globals::deferred->forwardRenderTargets[2]];
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			ID3D11ShaderResourceView* views[2] = { temporalAAMask.SRV, normals.SRV };
+			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			// Use shared D3D12 textures for FSR/XeSS, regular D3D11 textures for DLSS
 			ID3D11UnorderedAccessView* reactiveMaskUAV = upscaleMethod == UpscaleMethod::kDLSS ? reactiveMaskTexture->uav.get() : reactiveMaskShared12->uav;
+			
 			ID3D11UnorderedAccessView* transparencyUAV = nullptr;
 			if (upscaleMethod == UpscaleMethod::kDLSS) {
 				transparencyUAV = transparencyCompositionMaskTexture->uav.get();
@@ -1350,7 +1377,14 @@ void Upscaling::Upscale()
 				transparencyUAV = transparencyCompositionMaskShared12->uav;
 			}
 
-			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
+			ID3D11UnorderedAccessView* motionVectorUAV = nullptr;	
+			if (upscaleMethod == UpscaleMethod::kDLSS) {
+				motionVectorUAV = motionVectorCopyTexture->uav.get();
+			} else if (upscaleMethod == UpscaleMethod::kXESS) {
+				motionVectorUAV = motionVectorBufferShared12->uav;
+			}
+
+			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
@@ -1358,10 +1392,10 @@ void Upscaling::Upscale()
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
 
-		ID3D11ShaderResourceView* views[2] = { nullptr, nullptr };
+		ID3D11ShaderResourceView* views[4] = { nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-		ID3D11UnorderedAccessView* uavs[2] = { nullptr, nullptr };
+		ID3D11UnorderedAccessView* uavs[3] = { nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		ID3D11ComputeShader* shader = nullptr;
@@ -1374,7 +1408,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -1581,7 +1615,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	upscaling.CopySharedD3D12Resources(upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS);
+	upscaling.CopySharedD3D12Resources(true);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 		upscaling.PerformUpscaling();

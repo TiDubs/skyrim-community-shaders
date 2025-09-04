@@ -251,7 +251,7 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
@@ -259,7 +259,6 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	sl::DLSSOptions dlssOptions{};
 
@@ -311,7 +310,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
-		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
+		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
 
 		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &lowResExtent };
 		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
@@ -327,6 +326,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
+
 		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
 	}
 
