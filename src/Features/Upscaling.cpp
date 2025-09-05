@@ -725,13 +725,21 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
 	*enableWaterTAA = upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA;
 
+	// Force enable TAA if needed
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
-	bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+	// Cache original TAA values for UI
+	projectionPosScaleX = a_viewport->projectionPosScaleX;
+	projectionPosScaleY = a_viewport->projectionPosScaleY;
+	
+	// Get full screen size
+	auto state = globals::state;
+	auto screenSize = state->screenSize;
 
-	if (!menuTAA && upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		auto state = globals::state;
-		auto screenSize = state->screenSize;
+	auto screenWidth = static_cast<int>(screenSize.x);
+	auto screenHeight = static_cast<int>(screenSize.y);
+
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 
 		if (globals::game::isVR) {
 			resolutionScale = 1.0f;
@@ -743,40 +751,40 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
-		if (wasUpscaled) {
-			auto screenWidth = static_cast<int>(screenSize.x);
-			auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
 
-			auto screenHeight = static_cast<int>(screenSize.y);
-			auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-			auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
-			// Disable jitter due to VR head movements emulating it
-			if (globals::game::isVR) {
-				jitter.x = 0.0f;
-				jitter.y = 0.0f;
-			} else {
-				GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
-			}
+		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+		
+		if (globals::game::isVR)
+			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+		else
+			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-			if (globals::game::isVR)
-				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
-			else
-				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
-
-			a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
-		}
+		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;	
 	} else {
 		resolutionScale = 1.0f;
+
+		if (globals::game::isVR)
+			jitter.x = -a_viewport->projectionPosScaleX * screenWidth;
+		else
+			jitter.x = -a_viewport->projectionPosScaleX * screenWidth / 2.0f;
+
+		jitter.y = a_viewport->projectionPosScaleY * screenHeight / 2.0f;
 	}
 
 	auto& runtimeData = a_viewport->GetRuntimeData();
 
-	runtimeData.dynamicResolutionPreviousWidthRatio = runtimeData.dynamicResolutionWidthRatio;
-	runtimeData.dynamicResolutionPreviousHeightRatio = runtimeData.dynamicResolutionHeightRatio;
+	runtimeData.dynamicResolutionPreviousWidthRatio = dynamicResolutionWidthRatio;
+	runtimeData.dynamicResolutionPreviousHeightRatio = dynamicResolutionHeightRatio;
 	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
 	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
+
+	dynamicResolutionWidthRatio = resolutionScale;
+	dynamicResolutionHeightRatio = resolutionScale;
 
 	// Disable dynamic resolution unless the game explictly enables it
 	if (!globals::game::isVR)
@@ -784,8 +792,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	if (upscaleMethod == UpscaleMethod::kTAA)
 		resolutionScale = 1.0f;
-
-	wasUpscaled = false;
 }
 
 void Upscaling::SetupResources()
@@ -1153,9 +1159,25 @@ void Upscaling::PostDisplay()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+	//bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = menuTAA;
+	BSImagespaceShaderISTemporalAA->taaEnabled = true;
+
+	auto viewport = globals::game::graphicsState;
+
+	viewport->projectionPosScaleX = projectionPosScaleX;
+	viewport->projectionPosScaleY = projectionPosScaleY;
+
+	auto& runtimeData = viewport->GetRuntimeData();
+
+	runtimeData.dynamicResolutionPreviousWidthRatio = 1;
+	runtimeData.dynamicResolutionPreviousHeightRatio = 1;
+	runtimeData.dynamicResolutionWidthRatio = 1;
+	runtimeData.dynamicResolutionHeightRatio = 1;
+	runtimeData.dynamicResolutionLock = 1;
+
+	globals::game::renderer->UpdateViewPort(0, 0, 1);
+	UpdateCameraData();
 
 	globals::state->RenderReShade();
 
@@ -1666,8 +1688,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	func(a1, a3, er8_);
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
-
-	upscaling.wasUpscaled = true;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)

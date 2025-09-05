@@ -73,7 +73,6 @@ public:
 	bool lowRefreshRate = false;
 	bool fidelityFXMissing = false;
 	bool d3d12Interop = false;
-	bool wasUpscaled = false;
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
@@ -163,6 +162,12 @@ public:
 	static inline class DX12SwapChain dx12SwapChain;
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
+
+	float projectionPosScaleX = 0.0f;
+	float projectionPosScaleY = 0.0f;
+
+	float dynamicResolutionWidthRatio = 1.0f;
+	float dynamicResolutionHeightRatio = 1.0f;
 
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopySharedD3D12Resources();

@@ -118,10 +118,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	auto state = globals::state;
 
-	auto wasUpscaled = upscaling.wasUpscaled;
-
 	auto screenSize = state->screenSize;
-	auto renderSize = wasUpscaled ? Util::ConvertToDynamic(state->screenSize, true) : screenSize;
+	auto renderSize = Util::ConvertToDynamic(state->screenSize, true);
 
 	configParameters.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
 	configParameters.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
@@ -155,24 +153,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		dispatchParameters.renderSize.width = static_cast<uint32_t>(renderSize.x);
 		dispatchParameters.renderSize.height = static_cast<uint32_t>(renderSize.y);
 
-		auto gameViewport = globals::game::graphicsState;
-
-		if (wasUpscaled) {
-			float2 jitter;
-
-			if (globals::game::isVR)
-				jitter.x = -gameViewport->projectionPosScaleX * renderSize.x;
-			else
-				jitter.x = -gameViewport->projectionPosScaleX * renderSize.x / 2.0f;
-
-			jitter.y = gameViewport->projectionPosScaleY * renderSize.y / 2.0f;
-
-			dispatchParameters.jitterOffset.x = -jitter.x;
-			dispatchParameters.jitterOffset.y = -jitter.y;
-		} else {
-			dispatchParameters.jitterOffset.x = 0.0f;
-			dispatchParameters.jitterOffset.y = 0.0f;
-		}
+		dispatchParameters.jitterOffset.x = -upscaling.jitter.x;
+		dispatchParameters.jitterOffset.y = -upscaling.jitter.y;
 
 		dispatchParameters.frameTimeDelta = RE::GetSecondsSinceLastFrame() * 1000.f;
 
