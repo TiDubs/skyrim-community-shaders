@@ -214,9 +214,7 @@ struct IDXGISwapChain_Present
 	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
-		auto& upscaling = globals::features::upscaling;
 		auto menu = globals::menu;
-		upscaling.CopyFrameGenerationResources();
 		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();
@@ -224,8 +222,6 @@ struct IDXGISwapChain_Present
 		HRESULT retval = func(This, SyncInterval, Flags);
 
 		TracyD3D11Collect(state->tracyCtx);
-
-		upscaling.FrameLimiter();
 
 		return retval;
 	}

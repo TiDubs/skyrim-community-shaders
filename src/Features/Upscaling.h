@@ -165,8 +165,7 @@ public:
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
-	void CopyFrameGenerationResources();
-	void CopySharedD3D12Resources(bool a_upscaling);
+	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();

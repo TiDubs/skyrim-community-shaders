@@ -1057,15 +1057,7 @@ void Upscaling::UpdateSharedResources()
 		needsUpscalingResources, needsFSRSpecific, needsFrameGenResources);
 }
 
-void Upscaling::CopyFrameGenerationResources()
-{
-	if (!d3d12Interop || !settings.frameGenerationMode)
-		return;
-
-	CopySharedD3D12Resources(false);
-}
-
-void Upscaling::CopySharedD3D12Resources(bool a_upscaling)
+void Upscaling::CopySharedD3D12Resources()
 {
 	// Only copy once per frame for all upscaling systems (XeSS, Frame Generation, etc.)
 	if (!sharedResourcesFrameChecker.IsNewFrame())
@@ -1079,7 +1071,7 @@ void Upscaling::CopySharedD3D12Resources(bool a_upscaling)
 	auto context = globals::d3d::context;
 
 	// Not required by XeSS
-	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12Interop && settings.frameGenerationMode && !(upscaleMethod == UpscaleMethod::kXESS && a_upscaling))) {
+	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12Interop && settings.frameGenerationMode && upscaleMethod != UpscaleMethod::kXESS)) {
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 		// Copy only the dynamic resolution area
@@ -1661,7 +1653,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	upscaling.CopySharedD3D12Resources(true);
+	upscaling.CopySharedD3D12Resources();
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 		upscaling.PerformUpscaling();
