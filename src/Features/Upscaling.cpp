@@ -731,7 +731,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Cache original TAA values for UI
 	projectionPosScaleX = a_viewport->projectionPosScaleX;
 	projectionPosScaleY = a_viewport->projectionPosScaleY;
-	
+
 	// Get full screen size
 	auto state = globals::state;
 	auto screenSize = state->screenSize;
@@ -740,7 +740,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-
 		if (globals::game::isVR) {
 			resolutionScale = 1.0f;
 		} else if (upscaleMethod == UpscaleMethod::kXESS) {
@@ -758,13 +757,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
 		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
-		
+
 		if (globals::game::isVR)
 			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
 		else
 			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;	
+		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 	} else {
 		resolutionScale = 1.0f;
 
