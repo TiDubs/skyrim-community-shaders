@@ -1158,9 +1158,12 @@ void Upscaling::PostDisplay()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	//bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+	auto gameIsPaused = globals::game::ui->GameIsPaused();
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = true;
+	if (d3d12Interop && settings.frameGenerationMode)
+		BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() != UpscaleMethod::kNONE && gameIsPaused;
+	else
+		BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() != UpscaleMethod::kNONE;
 
 	auto viewport = globals::game::graphicsState;
 
@@ -1605,6 +1608,18 @@ void Upscaling::UpscaleDepth()
 			auto& saoCameraZ = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSAO_CAMERAZ];
 
 			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+			
+			// Sometimes this is not already copied e.g. map menu
+			auto renderSize = Util::ConvertToDynamic(screenSize);
+			D3D11_BOX srcBox = {};
+			srcBox.left = 0;
+			srcBox.top = 0;
+			srcBox.front = 0;
+			srcBox.right = (UINT)renderSize.x;
+			srcBox.bottom = (UINT)renderSize.y;
+			srcBox.back = 1;
+
+			context->CopySubresourceRegion(depthCopy.texture, 0, 0, 0, 0, depth.texture, 0, &srcBox);
 
 			// Clear stencil to be 0xFF
 			if (globals::game::isVR)

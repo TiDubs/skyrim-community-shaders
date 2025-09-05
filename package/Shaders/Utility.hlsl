@@ -555,7 +555,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #	endif
 	float adjustBias = 0;
-#		if defined(TREE_ANIM) && defined(VC)
+#		if defined(TREE_ANIM) && defined(VC) && !defined(RENDER_SHADOWMAP) && !defined(RENDER_SHADOWMAP_CLAMPED) && !defined(RENDER_SHADOWMAP_PB)
 	adjustBias = saturate(input.TreeAlpha * 10.0);
 #		endif
 	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias + adjustBias);
