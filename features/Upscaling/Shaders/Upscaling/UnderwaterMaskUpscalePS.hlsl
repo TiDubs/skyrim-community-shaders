@@ -8,12 +8,12 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 UnderwaterMask : SV_TARGET;
+	float UnderwaterMask : SV_TARGET;
 };
 
 SamplerState LinearSampler : register(s0);
 
-Texture2D<float4> UnderwaterMask : register(t0);
+Texture2D<float> UnderwaterMask : register(t0);
 
 cbuffer JitterCB : register(b0)
 {
