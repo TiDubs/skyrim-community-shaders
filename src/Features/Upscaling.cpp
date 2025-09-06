@@ -1267,7 +1267,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12Interop && settings.frameGenerationMode;
+	return d3d12Interop && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
 }
 
 /**
@@ -1304,11 +1304,6 @@ void Upscaling::LoadUpscalingSDKs()
 void Upscaling::CheckFrameConstants()
 {
 	streamline.CheckFrameConstants();
-}
-
-bool Upscaling::IsFrameGenActive() const
-{
-	return fidelityFX.isFrameGenActive;
 }
 
 void Upscaling::SetUIBuffer()

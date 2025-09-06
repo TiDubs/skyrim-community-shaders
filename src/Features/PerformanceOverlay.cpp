@@ -176,8 +176,7 @@ void PerformanceOverlay::DrawSettings()
 				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
 				ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
-				bool isFrameGenActive = globals::features::upscaling.IsFrameGenActive();
-				if (isFrameGenActive && ImGui::IsItemHovered()) {
+				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
 					}
@@ -457,7 +456,7 @@ void PerformanceOverlay::DrawFPS()
 	// Show Post-FG frametime graph if enabled
 	if (this->settings.ShowPostFGFrameTimeGraph && this->state.isFrameGenerationActive) {
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenActive();
+		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
 
 		if (isFrameGenActive) {
 			// Show note that FSR uses calculated data
@@ -1961,7 +1960,7 @@ void PerformanceOverlay::UpdateGraphValues()
 		float fgDeltaTime = globals::features::upscaling.GetFrameGenerationFrameTime();
 
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenActive();
+		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (fgDeltaTime > 0.0f && !isFrameGenActive) {
 			state.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
 			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
