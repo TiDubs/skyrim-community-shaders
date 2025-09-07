@@ -162,7 +162,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 
-	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
+	std::string dlssLabel = resolutionScale == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -1137,16 +1137,6 @@ void UpdateCameraData()
 
 void Upscaling::PostDisplay()
 {
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-
-	auto gameIsPaused = globals::game::ui->GameIsPaused();
-
-	if (d3d12Interop && settings.frameGenerationMode)
-		BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() != UpscaleMethod::kNONE && gameIsPaused;
-	else
-		BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() != UpscaleMethod::kNONE;
-
 	auto viewport = globals::game::graphicsState;
 
 	viewport->projectionPosScaleX = projectionPosScaleX;
@@ -1167,6 +1157,8 @@ void Upscaling::PostDisplay()
 
 	if (d3d12Interop)
 		SetUIBuffer();
+
+	globals::state->UpdateSharedData(false, false);
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)
@@ -1447,7 +1439,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -1670,7 +1662,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	func(a1, a3, er8_);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
