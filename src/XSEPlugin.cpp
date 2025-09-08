@@ -182,7 +182,7 @@ bool Load()
 			errors.push_back(errorMessage);
 		}
 	}
-	
+
 	const std::array requiredDLLs = {
 		L"Data/SKSE/Plugins/EngineFixes.dll"
 	};
