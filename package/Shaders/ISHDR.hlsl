@@ -111,16 +111,16 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
-		
+
 	hdrColor *= avgValue.y / avgValue.x;
-		
+
 	hdrColor += max(0, Param.x - hdrColor) * bloomColor;
 
 	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
 
 	float hdrLuminance = Color::RGBToLuminance(hdrColor);
 	hdrColor = Cinematic.w * lerp(lerp(hdrLuminance, hdrColor, Cinematic.x), lerp(hdrColor, hdrLuminance, saturate(hdrLuminance)) * Tint.xyz, Tint.w).xyz;
-	
+
 	float3 srgbColor = DisplayMapping::HuePreservingTonemap(hdrColor);
 
 #		if defined(FADE)
