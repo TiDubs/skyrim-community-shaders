@@ -494,9 +494,6 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			motionVectorCopyTexture->CreateUAV(uavDesc);
 		}
 	}
-
-	// Update shared D3D12 resources based on current requirements
-	UpdateSharedResources();
 }
 
 void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -533,9 +530,6 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			motionVectorCopyTexture = nullptr;
 		}
 	}
-
-	// Update shared resources to clean up what's no longer needed
-	UpdateSharedResources();
 }
 
 void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
@@ -573,9 +567,8 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 				xess.DestroyXeSSResources();
 		}
 
-		// Handle frame generation resource changes
-		if (frameGenModeChanged) {
-			// Update shared resources based on new frame generation state
+		// Handle shared resource changes
+		if (frameGenModeChanged || upscaleModeChanged) {
 			UpdateSharedResources();
 		}
 
