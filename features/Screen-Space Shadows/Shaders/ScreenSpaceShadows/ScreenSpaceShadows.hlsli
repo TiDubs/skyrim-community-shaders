@@ -10,7 +10,9 @@ namespace ScreenSpaceShadows
 		centerDepth += 1.0;
 		float depthSharpness = saturate((1024.0 * 1024.0) / (centerDepth * centerDepth));
 		float4 depthDifference = (depths - centerDepth) * depthSharpness;
-		return exp2(-depthDifference * depthDifference);
+		float4 weights = exp2(-depthDifference * depthDifference);
+		weights = lerp(weights, 0.0, depths > centerDepth);
+		return weights;
 	}
 
 	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, uint eyeIndex)
