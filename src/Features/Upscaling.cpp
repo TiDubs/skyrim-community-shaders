@@ -9,7 +9,6 @@
 #include "Upscaling/XeSS.h"
 #include <Windows.h>
 #include <directx/d3dx12.h>
-#include <reshade/reshade.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -23,15 +22,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	enableNISSharpening,
 	nisSharpness);
 
-// D3D hook function pointers and implementations
-decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
-
-HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
-{
-	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
-}
-
-decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
 /**
  * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
@@ -40,7 +31,7 @@ decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
  *
  * @return HRESULT indicating the success or failure of device and swap chain creation.
  */
-HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	IDXGIAdapter* pAdapter,
 	D3D_DRIVER_TYPE DriverType,
 	HMODULE Software,
@@ -131,7 +122,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		}
 	}
 
-	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+	auto ret = ptrD3D11CreateDeviceAndSwapChainUpscaling(pAdapter,
 		DriverType,
 		Software,
 		Flags,
@@ -379,9 +370,7 @@ void Upscaling::RestoreDefaultSettings()
 
 void Upscaling::Load()
 {
-	logger::info("[Upscaling] Load: Installing D3D IAT hooks and loading upscaling SDKs");
-	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-	*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 }
 
 struct CreateRenderTarget_LDR1
@@ -1190,8 +1179,6 @@ void Upscaling::PostDisplay()
 
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
-
-	globals::state->RenderReShade();
 
 	if (d3d12Interop)
 		SetUIBuffer();

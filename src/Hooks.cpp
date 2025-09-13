@@ -215,7 +215,6 @@ struct IDXGISwapChain_Present
 	{
 		auto state = globals::state;
 		auto menu = globals::menu;
-		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();
 
@@ -227,6 +226,51 @@ struct IDXGISwapChain_Present
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
+
+HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
+{
+	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+}
+
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+	IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
+	[[maybe_unused]] UINT FeatureLevels,
+	UINT SDKVersion,
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	IDXGISwapChain** ppSwapChain,
+	ID3D11Device** ppDevice,
+	D3D_FEATURE_LEVEL* pFeatureLevel,
+	ID3D11DeviceContext** ppImmediateContext)
+{
+	DXGI_ADAPTER_DESC adapterDesc;
+	pAdapter->GetDesc(&adapterDesc);
+	globals::state->SetAdapterDescription(adapterDesc.Description);
+	
+	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+		DriverType,
+		Software,
+		Flags,
+		&featureLevel,
+		1,
+		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
+		ppDevice,
+		pFeatureLevel,
+		ppImmediateContext);
+
+	return ret;
+}
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
@@ -787,6 +831,13 @@ namespace Hooks
 	 */
 	void Install()
 	{
+		if (!globals::features::upscaling.loaded) {
+			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+		}
+
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
 		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
 
@@ -883,5 +934,4 @@ namespace Hooks
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
-
 }
