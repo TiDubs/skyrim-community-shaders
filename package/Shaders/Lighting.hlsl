@@ -1009,12 +1009,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3x3 tbnTr = transpose(tbn);
 
-	// Fix incorrect normals without flipping everything
+	tbnTr[0] = normalize(tbnTr[0]);
+	tbnTr[1] = normalize(tbnTr[1]);
+	tbnTr[2] = normalize(tbnTr[2]);
+
 #if defined(TREE_ANIM)
-	if (dot(tbnTr[2], viewDirection) > 0.0)
+	// Fix incorrect normals without flipping everything
+	if (dot(tbnTr[2], viewDirection) < 0.0)
 	     tbnTr[2] = -tbnTr[2];
-	tbn = transpose(tbn);
 #endif
+
+	tbn = transpose(tbnTr);
 
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
@@ -1966,21 +1971,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // SNOW
 
 #	if defined(BACK_LIGHTING)
-#		if defined(TREE_ANIM)
-	float3 backLightColor = baseColor.xyz;
-	float maxc = max(backLightColor.x, max(backLightColor.y, backLightColor.z));
-	backLightColor = (maxc > 1e-6) ? backLightColor / maxc : 0.0.xxx;
-#		else
 	float3 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
-#			if defined(HAIR) && defined(CS_HAIR)
+#		if defined(HAIR) && defined(CS_HAIR)
 	if (useHairFlowMap) {
 		backLightColor = 0.0f;
 	}
-#			endif
 #		endif
 #	endif  // BACK_LIGHTING
 
-#	if defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING)
+#	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
 	float4 rimSoftLightColor = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 #	endif  // RIM_LIGHTING || SOFT_LIGHTING
 
