@@ -124,9 +124,24 @@ void State::Reset()
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
 
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+
+	GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
+
+	// Disable ApplyReflections
+	BSImagespaceShaderApplyReflections->active = false;
+
 	if (!globals::game::isVR) {
-		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
-		RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
+		GET_INSTANCE_MEMBER(BSImagespaceShaderISSnowSSS, imageSpaceManager);
+		GET_INSTANCE_MEMBER(BSImagespaceShaderISBlur, imageSpaceManager);
+
+		// Disable Snow SSS
+		bool* enableSnowSSS = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSnowSSS.get()) + 0x8LL);
+		*enableSnowSSS = false;
+
+		// Disable IBLF
+		bool* enableIBLF = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISBlur.get()) + 0x48LL);
+		*enableIBLF = false;
 	}
 }
 

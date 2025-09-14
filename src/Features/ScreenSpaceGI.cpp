@@ -333,12 +333,6 @@ void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;
 
-	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
-		if (auto setting = iniSettingCollection->GetSetting("bSAOEnable:Display")) {
-			setting->data.b = false;
-		}
-	}
-
 	recompileFlag = true;
 }
 
@@ -666,11 +660,12 @@ void ScreenSpaceGI::DrawSSGI()
 {
 	auto context = globals::d3d::context;
 
-	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
-		if (auto setting = iniSettingCollection->GetSetting("bSAOEnable:Display")) {
-			setting->data.b = false;
-		}
-	}
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
+
+	// Disable vanilla SSAO
+	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
+	*enableSSAO = false;
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
