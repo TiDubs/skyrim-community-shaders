@@ -1967,8 +1967,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(BACK_LIGHTING)
 #		if defined(TREE_ANIM)
-	float3 backLightColor = normalize(baseColor.xyz);
-	backLightColor.xyz /= max(backLightColor.x, max(backLightColor.y, backLightColor.z));
+	float3 backLightColor = baseColor.xyz;
+	float maxc = max(backLightColor.x, max(backLightColor.y, backLightColor.z));
+	backLightColor = (maxc > 1e-6) ? backLightColor / maxc : 0.0.xxx;
 #		else
 	float3 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
 #			if defined(HAIR) && defined(CS_HAIR)

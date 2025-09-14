@@ -611,11 +611,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 albedo = max(0, baseColor.xyz * vertexColor);
 
-	float3 normalizedColor = normalize(albedo.xyz);
-	normalizedColor /= max(normalizedColor.x, max(normalizedColor.y, normalizedColor.z));
-
-	float3 subsurfaceColor = albedo.xyz * normalizedColor * saturate(input.VertexNormal.w * 10.0);
-
+	float maxC = max(albedo.x, max(albedo.y, albedo.z));
+	float3 normalizedColor = (maxC > 1e-3) ? (albedo / maxC) : 0;
+	float3 subsurfaceColor = albedo * normalizedColor * saturate(input.VertexNormal.w * 10.0);
 	float3 sss = dirLightColor * saturate(-dirLightAngle);
 
 	if (complex)
