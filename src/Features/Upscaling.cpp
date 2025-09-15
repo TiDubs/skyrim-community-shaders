@@ -1455,7 +1455,12 @@ void Upscaling::Upscale()
 				transparencyUAV = transparencyCompositionMaskShared12->uav;
 			}
 
-			ID3D11UnorderedAccessView* motionVectorUAV = upscaleMethod == UpscaleMethod::kDLSS ? motionVectorCopyTexture->uav.get() : motionVectorBufferShared12->uav;
+			ID3D11UnorderedAccessView* motionVectorUAV = nullptr;
+			if (upscaleMethod == UpscaleMethod::kDLSS) {
+				motionVectorUAV = motionVectorCopyTexture->uav.get();
+			} else if (upscaleMethod == UpscaleMethod::kXESS) {
+				motionVectorUAV = motionVectorBufferShared12->uav;
+			}
 
 			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);

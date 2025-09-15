@@ -29,10 +29,12 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 	float depth = DepthMask[dispatchID.xy];
 
+#if defined(DLSS) || defined(XESS)
 	// Find longest motion vector in 5x5 neighborhood
 	float2 motionVector = MotionVectorMask[dispatchID.xy];
 	float2 longestMotionVector = motionVector;
 	float maxMotionLengthSq = dot(motionVector, motionVector);
+#endif
 
 	[unroll]
 	for (int y = -2; y <= 2; y++) {
@@ -46,6 +48,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 			float neighborDepth = DepthMask[samplePos];
 
+#if defined(DLSS) || defined(XESS)
 			// Take neighbor if it's longer AND closer
 			if (neighborDepth < depth){
 				taaMask.x = min(taaMask.x, TAAMask[samplePos].x);
@@ -59,11 +62,14 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 					maxMotionLengthSq = motionLengthSq;
 					longestMotionVector = neighborMotionVector;
 				}
+#endif				
 			}
 		}
 	}
 
+#if defined(DLSS) || defined(XESS)
 	MotionVectorOutput[dispatchID.xy] = longestMotionVector;
+#endif
 
 #if defined(DLSS) || defined(FSR)
 	float reactiveMask = taaMask.x * 0.1 + taaMask.y;
