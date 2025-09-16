@@ -878,6 +878,7 @@ void Upscaling::SetupResources()
 	// Initialize standalone NIS implementation
 	nis.Initialize();
 
+	// Initialize standalone RCAS implementation
 	rcas.Initialize();
 
 	auto upscaleMethod = GetUpscaleMethod();
