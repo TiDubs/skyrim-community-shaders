@@ -20,6 +20,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationForceEnable,
 	streamlineLogLevel,
 	enableNISSharpening,
+	sharpeningMethod,
 	nisSharpness);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
@@ -203,20 +204,29 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 		}
 
-		// NIS Sharpening section
-		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
+		// Sharpening section
+		if (ImGui::TreeNodeEx("Image Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("Image sharpening applied after upscaling for enhanced clarity");
 
-			const char* nisToggleModes[] = { "Disabled", "Enabled" };
-			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
+			const char* sharpeningToggleModes[] = { "Disabled", "Enabled" };
+			ImGui::SliderInt("Enable Sharpening", (int*)&settings.enableNISSharpening, 0, 1, sharpeningToggleModes[settings.enableNISSharpening]);
 
 			if (settings.enableNISSharpening) {
+				const char* sharpeningMethods[] = { "NIS", "RCAS" };
+				ImGui::SliderInt("Sharpening Method", (int*)&settings.sharpeningMethod, 0, 1, sharpeningMethods[settings.sharpeningMethod]);
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("NIS: NVIDIA Image Sharpening - Good general purpose sharpening");
+					ImGui::Text("RCAS: Robust Contrast Adaptive Sharpening - AMD's advanced sharpening algorithm");
+				}
+
 				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
+					ImGui::Text("Controls the intensity of sharpening. Higher values provide more sharpening.");
 				}
-			} else if (settings.enableNISSharpening) {
+			} else {
 				ImGui::BeginDisabled();
+				ImGui::SliderInt("Sharpening Method", (int*)&settings.sharpeningMethod, 0, 1, "Disabled");
 				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
 				ImGui::EndDisabled();
 			}
@@ -867,6 +877,8 @@ void Upscaling::SetupResources()
 
 	// Initialize standalone NIS implementation
 	nis.Initialize();
+
+	rcas.Initialize();
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -1727,7 +1739,14 @@ void Upscaling::ApplyNISSharpening()
 
 	context->CopyResource(tempCopy.texture, mainResource.get());
 
-	nis.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
+	// Apply sharpening based on selected method
+	if (settings.sharpeningMethod == 0) {
+		// Use NIS sharpening
+		nis.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
+	} else {
+		// Use RCAS sharpening
+		rcas.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
+	}
 
 	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
