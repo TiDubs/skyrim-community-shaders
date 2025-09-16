@@ -749,9 +749,16 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		}
 
 		data.InInterior = Util::IsInterior();
-		data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
 
-		data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		if (globals::game::sky)
+			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
+		else
+			data.HideSky = false;
+
+		if (globals::game::ui)
+			data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		else
+			data.InMapMenu = false;
 
 		auto& upscaling = globals::features::upscaling;
 
