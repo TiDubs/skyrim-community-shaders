@@ -116,7 +116,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	auto& upscaling = globals::features::upscaling;
 
 	// Wait for D3D11 to finish
-	d3d11Context->Flush();
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 	DX::ThrowIfFailed(upscaling.sharedD3D12CommandQueue->Wait(d3d12Fence.get(), fenceValue));
 	fenceValue++;
@@ -167,7 +166,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	float clearColor[4]{ 0, 0, 0, 0 };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	upscaling.FrameLimiter();
+	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
+	if (SyncInterval == 0)
+		upscaling.FrameLimiter();
 
 	return S_OK;
 }

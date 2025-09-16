@@ -1444,8 +1444,6 @@ void Upscaling::Upscale()
 			// Wait for D3D11 to finish
 			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
 			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(d3d11Context4.put())));
-			d3d11Context4->Flush();
-
 			DX::ThrowIfFailed(d3d11Context4->Signal(sharedD3D11Fence.get(), sharedInteropFenceValue));
 			DX::ThrowIfFailed(sharedD3D12CommandQueue->Wait(sharedD3D12Fence.get(), sharedInteropFenceValue));
 			sharedInteropFenceValue++;
