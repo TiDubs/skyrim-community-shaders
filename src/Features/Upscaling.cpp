@@ -165,7 +165,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 
-	std::string dlssLabel = resolutionScale.x == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
+	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -1427,7 +1427,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale.x == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(),  sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
