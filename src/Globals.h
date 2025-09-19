@@ -29,7 +29,6 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 
-class ParticleLights;
 
 class State;
 class Deferred;
@@ -83,7 +82,6 @@ namespace globals
 
 		namespace llf
 		{
-			extern ParticleLights particleLights;
 		}
 	}
 
