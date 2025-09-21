@@ -3,12 +3,23 @@
 #include <dxgi.h>
 #include <dxgi1_3.h>
 
+#include <cstring>
+
 #include "../../Deferred.h"
 #include "../../Hooks.h"
 #include "../../State.h"
 #include "../../Util.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+
+namespace
+{
+	bool IsViewportAllocated(const sl::ViewportHandle& handle)
+	{
+		constexpr sl::ViewportHandle kEmpty{};
+		return std::memcmp(&handle, &kEmpty, sizeof(sl::ViewportHandle)) != 0;
+	}
+}
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
@@ -206,10 +217,12 @@ void Streamline::CheckFrameConstants()
 		slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
 		auto state = globals::state;
+		const bool isVR = globals::game::isVR;
+		const uint32_t eyeCount = isVR ? 2u : 1u;
 
 		sl::Constants slConstants = {};
 
-		if (globals::game::isVR) {
+		if (isVR) {
 			slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
 		} else {
 			slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
@@ -238,15 +251,23 @@ void Streamline::CheckFrameConstants()
 		slConstants.jitterOffset = { -jitter.x, -jitter.y };
 		slConstants.reset = sl::Boolean::eFalse;
 
-		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
+		slConstants.mvecScale = { (isVR ? 0.5f : 1.0f), 1 };
 		slConstants.motionVectors3D = sl::Boolean::eFalse;
 		slConstants.motionVectorsInvalidValue = FLT_MIN;
 		slConstants.orthographicProjection = sl::Boolean::eFalse;
 		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
 		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
-			logger::error("[Streamline] Could not set constants");
+		for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+			auto& activeViewport = viewports[eyeIndex];
+			if (!IsViewportAllocated(activeViewport)) {
+				continue;
+			}
+
+			sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, activeViewport);
+			if (setConstantsResult != sl::Result::eOk) {
+				logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
+			}
 		}
 	}
 }
@@ -260,52 +281,83 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
-	sl::DLSSOptions dlssOptions{};
+	sl::DLSSOptions baseDlssOptions{};
 
 	// Map quality mode to DLSS mode
 	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
 	switch (qualityMode) {
 	case 1:
-		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+		baseDlssOptions.mode = sl::DLSSMode::eMaxQuality;
 		break;
 	case 2:
-		dlssOptions.mode = sl::DLSSMode::eBalanced;
+		baseDlssOptions.mode = sl::DLSSMode::eBalanced;
 		break;
 	case 3:
-		dlssOptions.mode = sl::DLSSMode::eMaxPerformance;
+		baseDlssOptions.mode = sl::DLSSMode::eMaxPerformance;
 		break;
 	case 4:
-		dlssOptions.mode = sl::DLSSMode::eUltraPerformance;
+		baseDlssOptions.mode = sl::DLSSMode::eUltraPerformance;
 		break;
 	default:
-		dlssOptions.mode = sl::DLSSMode::eDLAA;
+		baseDlssOptions.mode = sl::DLSSMode::eDLAA;
 		break;
 	}
 
-	dlssOptions.outputWidth = (uint)state->screenSize.x;
-	dlssOptions.outputHeight = (uint)state->screenSize.y;
-	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
-	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+	baseDlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+	baseDlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
-	dlssOptions.preExposure = 1.0f;
-	dlssOptions.sharpness = 0.0f;
+	baseDlssOptions.preExposure = 1.0f;
+	baseDlssOptions.sharpness = 0.0f;
 
-	dlssOptions.dlaaPreset = a_preset;
-	dlssOptions.qualityPreset = a_preset;
-	dlssOptions.balancedPreset = a_preset;
-	dlssOptions.performancePreset = a_preset;
-	dlssOptions.ultraPerformancePreset = a_preset;
+	baseDlssOptions.dlaaPreset = a_preset;
+	baseDlssOptions.qualityPreset = a_preset;
+	baseDlssOptions.balancedPreset = a_preset;
+	baseDlssOptions.performancePreset = a_preset;
+	baseDlssOptions.ultraPerformancePreset = a_preset;
 
-	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
-		logger::critical("[Streamline] Could not enable DLSS");
-	}
+	const bool isVR = globals::game::isVR;
+	const uint32_t eyeCount = isVR ? 2u : 1u;
 
-	{
-		auto screenSize = state->screenSize;
-		auto renderSize = Util::ConvertToDynamic(screenSize);
+	auto screenSize = state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-		sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
-		sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+	const uint32_t totalOutputWidth = static_cast<uint32_t>(screenSize.x);
+	const uint32_t totalOutputHeight = static_cast<uint32_t>(screenSize.y);
+	const uint32_t totalRenderWidth = static_cast<uint32_t>(renderSize.x);
+	const uint32_t totalRenderHeight = static_cast<uint32_t>(renderSize.y);
+
+	const uint32_t baseOutputWidth = eyeCount > 0 ? totalOutputWidth / eyeCount : totalOutputWidth;
+	const uint32_t baseRenderWidth = eyeCount > 0 ? totalRenderWidth / eyeCount : totalRenderWidth;
+
+	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+		auto& activeViewport = viewports[eyeIndex];
+		if (!IsViewportAllocated(activeViewport)) {
+			if (eyeCount > 1) {
+				logger::warn("[Streamline] Skipping DLSS for eye {} because the viewport handle is not allocated", eyeIndex);
+			}
+			continue;
+		}
+
+		const uint32_t renderOffsetX = isVR ? baseRenderWidth * eyeIndex : 0u;
+		const uint32_t outputOffsetX = isVR ? baseOutputWidth * eyeIndex : 0u;
+
+		const uint32_t currentRenderWidth =
+			(isVR && eyeIndex == eyeCount - 1) ? (totalRenderWidth - renderOffsetX) : (isVR ? baseRenderWidth : totalRenderWidth);
+		const uint32_t currentOutputWidth =
+			(isVR && eyeIndex == eyeCount - 1) ? (totalOutputWidth - outputOffsetX) : (isVR ? baseOutputWidth : totalOutputWidth);
+
+		sl::DLSSOptions dlssOptions = baseDlssOptions;
+		dlssOptions.outputWidth = currentOutputWidth;
+		dlssOptions.outputHeight = totalOutputHeight;
+
+		sl::Result setOptionsResult = slDLSSSetOptions(activeViewport, dlssOptions);
+		if (setOptionsResult != sl::Result::eOk) {
+			logger::critical("[Streamline] Could not enable DLSS for viewport {}", eyeIndex);
+			continue;
+		}
+
+		sl::Extent lowResExtent{ renderOffsetX, 0, currentRenderWidth, totalRenderHeight };
+		sl::Extent fullExtent{ outputOffsetX, 0, currentOutputWidth, totalOutputHeight };
 
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
@@ -325,12 +377,12 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
 
-		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
-	}
+		slSetTag(activeViewport, resourceTags, _countof(resourceTags), globals::d3d::context);
 
-	sl::ViewportHandle view(viewport);
-	const sl::BaseStructure* inputs[] = { &view };
-	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+		sl::ViewportHandle view(activeViewport);
+		const sl::BaseStructure* inputs[] = { &view };
+		slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+	}
 }
 
 float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
@@ -390,14 +442,22 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 }
 
 /**
- * @brief Releases DLSS resources and disables DLSS for the current viewport.
+ * @brief Releases DLSS resources and disables DLSS for the active viewports.
  *
- * Sets the DLSS mode to off and frees all DLSS-related resources associated with the viewport.
+ * Sets the DLSS mode to off and frees all DLSS-related resources associated with each viewport handle.
  */
 void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
-	slDLSSSetOptions(viewport, dlssOptions);
-	slFreeResources(sl::kFeatureDLSS, viewport);
+
+	for (auto& activeViewport : viewports) {
+		if (!IsViewportAllocated(activeViewport)) {
+			continue;
+		}
+
+		slDLSSSetOptions(activeViewport, dlssOptions);
+		slFreeResources(sl::kFeatureDLSS, activeViewport);
+		activeViewport = {};
+	}
 }
