@@ -197,11 +197,10 @@ void Upscaling::DrawSettings()
 		uint32_t qualityMax = 4u;
 		settings.qualityMode = std::clamp(settings.qualityMode, 0u, qualityMax);
 
-		if (upscaleMethod == UpscaleMethod::kDLSS) {
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-		} else {
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
+                if (upscaleMethod == UpscaleMethod::kDLSS)
+                        ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
+                else
+                        ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
 
 	if (!globals::game::isVR) {
