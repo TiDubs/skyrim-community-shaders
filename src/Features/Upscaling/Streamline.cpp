@@ -483,6 +483,19 @@ void Streamline::DestroyDLSSResources()
 
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
+<<<<<<< HEAD
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
+=======
+
+	for (auto& activeViewport : viewports) {
+		if (!IsViewportAllocated(activeViewport)) {
+			continue;
+		}
+
+		slDLSSSetOptions(activeViewport, dlssOptions);
+		slFreeResources(sl::kFeatureDLSS, activeViewport);
+		activeViewport = {};
+	}
+>>>>>>> origin/feature/add-dlss-vr
 }
