@@ -199,12 +199,6 @@ void Upscaling::DrawSettings()
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-
-			if (globals::game::isVR) {
-				ImGui::Text("VR DLSS presets adjust the per-eye render resolution.");
-				ImGui::BulletText("DLAA keeps the native resolution with DLSS anti-aliasing.");
-				ImGui::BulletText("Quality, Balanced, Performance, and Ultra Performance progressively lower the render resolution for more performance.");
-			}
 		} else {
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 		}
