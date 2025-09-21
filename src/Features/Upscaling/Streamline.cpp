@@ -1,5 +1,8 @@
 #include "Streamline.h"
 
+#include <cstring>
+#include <type_traits>
+
 #include <dxgi.h>
 #include <dxgi1_3.h>
 
@@ -14,11 +17,25 @@
 
 namespace
 {
-	bool IsViewportAllocated(const sl::ViewportHandle& handle)
-	{
-		constexpr sl::ViewportHandle kEmpty{};
-		return std::memcmp(&handle, &kEmpty, sizeof(sl::ViewportHandle)) != 0;
+static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
+
+[[nodiscard]] bool AreViewportHandlesEqual(const sl::ViewportHandle& lhs, const sl::ViewportHandle& rhs) noexcept
+{
+	const sl::ViewportHandle kEmpty{};
+
+	const bool lhsEmpty = std::memcmp(&lhs, &kEmpty, sizeof(kEmpty)) == 0;
+	const bool rhsEmpty = std::memcmp(&rhs, &kEmpty, sizeof(kEmpty)) == 0;
+
+	if (lhsEmpty && rhsEmpty) {
+		return true;
 	}
+
+	if (lhsEmpty != rhsEmpty) {
+		return false;
+	}
+
+	return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
+}
 }
 
 void LoggingCallback(sl::LogType type, const char* msg)
@@ -448,16 +465,12 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
  */
 void Streamline::DestroyDLSSResources()
 {
+	if (AreViewportHandlesEqual(viewport, sl::ViewportHandle{})) {
+		return;
+	}
+
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
-
-	for (auto& activeViewport : viewports) {
-		if (!IsViewportAllocated(activeViewport)) {
-			continue;
-		}
-
-		slDLSSSetOptions(activeViewport, dlssOptions);
-		slFreeResources(sl::kFeatureDLSS, activeViewport);
-		activeViewport = {};
-	}
+	slDLSSSetOptions(viewport, dlssOptions);
+	slFreeResources(sl::kFeatureDLSS, viewport);
 }
