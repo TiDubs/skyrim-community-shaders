@@ -19,12 +19,16 @@ namespace
 {
 static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 
-[[nodiscard]] bool AreViewportHandlesEqual(const sl::ViewportHandle& lhs, const sl::ViewportHandle& rhs) noexcept
+[[nodiscard]] bool IsViewportAllocated(const sl::ViewportHandle& handle) noexcept
 {
 	const sl::ViewportHandle kEmpty{};
+	return std::memcmp(&handle, &kEmpty, sizeof(kEmpty)) != 0;
+}
 
-	const bool lhsEmpty = std::memcmp(&lhs, &kEmpty, sizeof(kEmpty)) == 0;
-	const bool rhsEmpty = std::memcmp(&rhs, &kEmpty, sizeof(kEmpty)) == 0;
+[[nodiscard]] bool AreViewportHandlesEqual(const sl::ViewportHandle& lhs, const sl::ViewportHandle& rhs) noexcept
+{
+	const bool lhsEmpty = !IsViewportAllocated(lhs);
+	const bool rhsEmpty = !IsViewportAllocated(rhs);
 
 	if (lhsEmpty && rhsEmpty) {
 		return true;
@@ -465,7 +469,15 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
  */
 void Streamline::DestroyDLSSResources()
 {
-	if (AreViewportHandlesEqual(viewport, sl::ViewportHandle{})) {
+	bool anyAllocated = false;
+	for (const auto& handle : viewports) {
+		if (IsViewportAllocated(handle)) {
+			anyAllocated = true;
+			break;
+		}
+	}
+
+	if (!anyAllocated) {
 		return;
 	}
 
