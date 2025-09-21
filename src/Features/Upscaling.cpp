@@ -190,19 +190,21 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display upscaling settings if applicable
-	if (!globals::game::isVR) {
-		if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-			const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
-			const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
+		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-			if (upscaleMethod == UpscaleMethod::kDLSS)
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-			else
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
-	} else {
-		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
+		uint32_t qualityMax = globals::game::isVR ? 0u : 4u;
+		settings.qualityMode = std::clamp(settings.qualityMode, 0u, qualityMax);
+
+		if (upscaleMethod == UpscaleMethod::kDLSS)
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
+		else
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
+
+	if (!globals::game::isVR)
+		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
 
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -689,7 +691,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		float resolutionScaleBase = 1.0f;
 
 		if (globals::game::isVR) {
-			resolutionScaleBase = 1.0f;
+			if (upscaleMethod == UpscaleMethod::kDLSS) {
+				auto perEyeWidth = static_cast<uint32_t>(std::max(1, screenWidth / 2));
+				auto perEyeHeight = static_cast<uint32_t>(std::max(1, screenHeight));
+				resolutionScaleBase = streamline.GetInputResolutionScale(perEyeWidth, perEyeHeight, settings.qualityMode);
+			} else {
+				resolutionScaleBase = 1.0f;
+			}
 		} else if (upscaleMethod == UpscaleMethod::kXESS) {
 			resolutionScaleBase = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {

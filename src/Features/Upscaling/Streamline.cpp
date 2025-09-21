@@ -335,6 +335,11 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
 {
+	if (outputWidth == 0 || outputHeight == 0) {
+		logger::error("[Streamline] Invalid output resolution {}x{} for DLSS optimal settings", outputWidth, outputHeight);
+		return 1.0f;
+	}
+
 	sl::DLSSMode dlssMode;
 	switch (qualityMode) {
 	case 1:
@@ -358,6 +363,7 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	dlssOptions.mode = dlssMode;
 	dlssOptions.outputWidth = outputWidth;
 	dlssOptions.outputHeight = outputHeight;
+	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue; /* could be a bad assumptioon, but Streamline::Upscale already tags our input color as HDR when we actually invoke DLSS, because the render target we hand over is the HDR scene buffer. Once we started reusing GetInputResolutionScale() for the VR per-eye path, I mirrored that flag inside the optimal-settings query so slDLSSGetOptimalSettings runs with the same assumptions as the real DLSS evaluation. Without explicitly setting colorBuffersHDR there, the helper would treat the request as an LDR workload and could suggest a mismatched render size.*/
 
 	sl::DLSSOptimalSettings optimalSettings{};
 	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
