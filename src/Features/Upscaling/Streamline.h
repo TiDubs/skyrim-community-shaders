@@ -6,6 +6,8 @@
 #include <d3d11_4.h>
 #include <d3d12.h>
 
+#include <array>
+
 #define NV_WINDOWS
 
 #pragma warning(push)
@@ -32,7 +34,7 @@ public:
 
 	bool featureDLSS = false;
 
-	sl::ViewportHandle viewport{ 0 };
+	std::array<sl::ViewportHandle, 2> viewports{};
 
 	HMODULE interposer = NULL;
 
