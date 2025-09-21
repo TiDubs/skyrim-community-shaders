@@ -194,7 +194,7 @@ void Upscaling::DrawSettings()
 		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-		uint32_t qualityMax = globals::game::isVR ? 0u : 4u;
+		uint32_t qualityMax = 4u;
 		settings.qualityMode = std::clamp(settings.qualityMode, 0u, qualityMax);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
@@ -202,9 +202,6 @@ void Upscaling::DrawSettings()
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
-
-	if (!globals::game::isVR)
-		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
 
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
