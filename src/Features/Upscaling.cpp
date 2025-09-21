@@ -194,16 +194,23 @@ void Upscaling::DrawSettings()
 		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-                uint32_t qualityMax = 4u;
-                settings.qualityMode = std::clamp(settings.qualityMode, 0u, qualityMax);
+		uint32_t qualityMax = 4u;
+		settings.qualityMode = std::clamp(settings.qualityMode, 0u, qualityMax);
 
-                if (upscaleMethod == UpscaleMethod::kDLSS)
-                        ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-                else
-                        ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-        }
+		if (upscaleMethod == UpscaleMethod::kDLSS) {
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 
-        if (!globals::game::isVR) {
+			if (globals::game::isVR) {
+				ImGui::Text("VR DLSS presets adjust the per-eye render resolution.");
+				ImGui::BulletText("DLAA keeps the native resolution with DLSS anti-aliasing.");
+				ImGui::BulletText("Quality, Balanced, Performance, and Ultra Performance progressively lower the render resolution for more performance.");
+			}
+		} else {
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, static_cast<int>(qualityMax), std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+		}
+	}
+
+	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
 			ImGui::Text("Uses AMD FSR Frame Generation technology");
