@@ -34,7 +34,13 @@ public:
 
 	bool featureDLSS = false;
 
-	std::array<sl::ViewportHandle, 2> viewports{};
+	struct EyeState
+	{
+		sl::ViewportHandle viewport{};
+		bool constantsInitialized = false;
+	};
+
+	std::array<EyeState, 2> eyes{};
 
 	HMODULE interposer = NULL;
 
@@ -81,4 +87,8 @@ public:
 	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 
 	void DestroyDLSSResources();
+
+	private:
+		bool EnsureViewportAllocated(uint32_t eyeIndex);
+		void ResetEyeState(uint32_t eyeIndex);
 };
