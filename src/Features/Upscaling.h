@@ -68,8 +68,9 @@ public:
 
 	struct UpscalingDataCB
 	{
-		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
-		float2 pad0;
+		float2 trueSamplingDim;   // BufferDim.xy * ResolutionScale
+		float2 leftEyeBounds;     // [min, max) range for the left eye in pixels
+		float2 rightEyeBounds;    // [min, max) range for the right eye in pixels (degenerates for mono)
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
