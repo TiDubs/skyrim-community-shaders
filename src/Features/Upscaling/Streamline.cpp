@@ -6,7 +6,7 @@
 #include <dxgi.h>
 #include <dxgi1_3.h>
 
-#include <cstring>
+#include <magic_enum.hpp>
 
 #include "../../Deferred.h"
 #include "../../Hooks.h"
@@ -224,6 +224,11 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
+
+		const uint32_t eyeCount = globals::game::isVR ? 2u : 1u;
+		for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+			EnsureViewportAllocated(eyeIndex);
+		}
 	}
 }
 
@@ -234,64 +239,89 @@ void Streamline::PostDevice()
  */
 void Streamline::CheckFrameConstants()
 {
-	if (frameChecker.IsNewFrame() && globals::features::upscaling.streamline.initialized) {
-		slGetNewFrameToken(frameToken, &globals::state->frameCount);
+	if (!frameChecker.IsNewFrame() || !globals::features::upscaling.streamline.initialized) {
+		return;
+	}
 
-		auto state = globals::state;
-		const bool isVR = globals::game::isVR;
-		const uint32_t eyeCount = isVR ? 2u : 1u;
+	slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
-		sl::Constants slConstants = {};
+	auto state = globals::state;
+	const bool isVR = globals::game::isVR;
+	const uint32_t eyeCount = isVR ? 2u : 1u;
 
-		if (isVR) {
-			slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
-		} else {
-			slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
+	const float totalWidth = state->screenSize.x;
+	const float totalHeight = state->screenSize.y;
+	const float safeHeight = totalHeight > 0.0f ? totalHeight : 1.0f;
+	const float baseEyeWidth = eyeCount > 0 ? totalWidth / static_cast<float>(eyeCount) : totalWidth;
+	const float cameraFov = Util::GetVerticalFOVRad();
+	const float cameraNear = *globals::game::cameraNear;
+	const float cameraFar = *globals::game::cameraFar;
+	const auto jitter = globals::features::upscaling.jitter;
+
+	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+		if (!EnsureViewportAllocated(eyeIndex)) {
+			continue;
 		}
 
-		slConstants.cameraFOV = Util::GetVerticalFOVRad();
-		slConstants.cameraNear = *globals::game::cameraNear;
-		slConstants.cameraFar = *globals::game::cameraFar;
+		auto& eye = eyes[eyeIndex];
 
-		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
+		sl::Constants slConstants{};
+
+		float currentEyeWidth = isVR ? baseEyeWidth : totalWidth;
+		if (isVR && eyeIndex == eyeCount - 1) {
+			const float consumedWidth = baseEyeWidth * static_cast<float>(eyeCount - 1);
+			currentEyeWidth = totalWidth - consumedWidth;
+		}
+
+		if (currentEyeWidth <= 0.0f) {
+			currentEyeWidth = baseEyeWidth > 0.0f ? baseEyeWidth : totalWidth;
+			if (currentEyeWidth <= 0.0f) {
+				currentEyeWidth = 1.0f;
+			}
+		}
+
+		slConstants.cameraAspectRatio = currentEyeWidth / safeHeight;
+		slConstants.cameraFOV = cameraFov;
+		slConstants.cameraNear = cameraNear;
+		slConstants.cameraFar = cameraFar;
 
 		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 		slConstants.cameraPinholeOffset = { 0.f, 0.f };
+
+		const auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse(eyeIndex).Transpose();
 		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
-		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
+
+		const auto& cameraPosAdjust = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
+		slConstants.cameraPos = { cameraPosAdjust.x, cameraPosAdjust.y, cameraPosAdjust.z };
+
+		const auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered(eyeIndex).Transpose();
+		std::memcpy(&slConstants.cameraViewToClip, &cameraViewToClip, sizeof(slConstants.cameraViewToClip));
 		slConstants.depthInverted = sl::Boolean::eFalse;
 
 		recalculateCameraMatrices(slConstants);
 
-		auto& upscaling = globals::features::upscaling;
-		auto jitter = upscaling.jitter;
 		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = sl::Boolean::eFalse;
+		slConstants.reset = eye.constantsInitialized ? sl::Boolean::eFalse : sl::Boolean::eTrue;
 
-		slConstants.mvecScale = { (isVR ? 0.5f : 1.0f), 1 };
+		slConstants.mvecScale = { isVR ? 0.5f : 1.0f, 1.0f };
 		slConstants.motionVectors3D = sl::Boolean::eFalse;
 		slConstants.motionVectorsInvalidValue = FLT_MIN;
 		slConstants.orthographicProjection = sl::Boolean::eFalse;
 		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
 		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
-			auto& activeViewport = viewports[eyeIndex];
-			if (!IsViewportAllocated(activeViewport)) {
-				continue;
-			}
-
-			sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, activeViewport);
-			if (setConstantsResult != sl::Result::eOk) {
-				logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
-			}
+		sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, eye.viewport);
+		if (setConstantsResult != sl::Result::eOk) {
+			logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
+			continue;
 		}
+
+		eye.constantsInitialized = true;
 	}
 }
+
 
 void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, sl::DLSSPreset a_preset)
 {
@@ -351,13 +381,15 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	const uint32_t baseRenderWidth = eyeCount > 0 ? totalRenderWidth / eyeCount : totalRenderWidth;
 
 	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
-		auto& activeViewport = viewports[eyeIndex];
-		if (!IsViewportAllocated(activeViewport)) {
+		if (!EnsureViewportAllocated(eyeIndex)) {
 			if (eyeCount > 1) {
 				logger::warn("[Streamline] Skipping DLSS for eye {} because the viewport handle is not allocated", eyeIndex);
 			}
 			continue;
 		}
+
+		auto& eye = eyes[eyeIndex];
+		auto& activeViewport = eye.viewport;
 
 		const uint32_t renderOffsetX = isVR ? baseRenderWidth * eyeIndex : 0u;
 		const uint32_t outputOffsetX = isVR ? baseOutputWidth * eyeIndex : 0u;
@@ -470,8 +502,8 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 void Streamline::DestroyDLSSResources()
 {
 	bool anyAllocated = false;
-	for (const auto& handle : viewports) {
-		if (IsViewportAllocated(handle)) {
+	for (const auto& eye : eyes) {
+		if (IsViewportAllocated(eye.viewport)) {
 			anyAllocated = true;
 			break;
 		}
@@ -484,13 +516,52 @@ void Streamline::DestroyDLSSResources()
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
 
-	for (auto& activeViewport : viewports) {
-		if (!IsViewportAllocated(activeViewport)) {
+	const uint32_t eyeCount = static_cast<uint32_t>(eyes.size());
+	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+		auto& eye = eyes[eyeIndex];
+		if (!IsViewportAllocated(eye.viewport)) {
+			ResetEyeState(eyeIndex);
 			continue;
 		}
 
-		slDLSSSetOptions(activeViewport, dlssOptions);
-		slFreeResources(sl::kFeatureDLSS, activeViewport);
-		activeViewport = {};
+		slDLSSSetOptions(eye.viewport, dlssOptions);
+		slFreeResources(sl::kFeatureDLSS, eye.viewport);
+		ResetEyeState(eyeIndex);
 	}
+}
+
+bool Streamline::EnsureViewportAllocated(uint32_t eyeIndex)
+{
+	if (eyeIndex >= static_cast<uint32_t>(eyes.size())) {
+		return false;
+	}
+
+	auto& eye = eyes[eyeIndex];
+	if (IsViewportAllocated(eye.viewport)) {
+		return true;
+	}
+
+	if (!featureDLSS || slAllocateResources == nullptr) {
+		return false;
+	}
+
+	const sl::Result result = slAllocateResources(sl::kFeatureDLSS, eye.viewport);
+	if (result != sl::Result::eOk) {
+		logger::error("[Streamline] Failed to allocate viewport {} (error: {})", eyeIndex, magic_enum::enum_name(result));
+		ResetEyeState(eyeIndex);
+		return false;
+	}
+
+	eye.constantsInitialized = false;
+	return true;
+}
+
+void Streamline::ResetEyeState(uint32_t eyeIndex)
+{
+	if (eyeIndex >= static_cast<uint32_t>(eyes.size())) {
+		return;
+	}
+
+	eyes[eyeIndex].viewport = {};
+	eyes[eyeIndex].constantsInitialized = false;
 }
