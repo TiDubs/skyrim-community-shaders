@@ -579,6 +579,10 @@ public:
 		std::string version;
 		uint64_t fileSize = 0;
 		std::string modificationTime;
+		bool hasSystemInterface = false;
+		bool hasOverlayInterface = false;
+		std::string compatibilityWarning;
+		std::string overlayWarning;
 	} openVRInfo;
 
 	RE::NiPoint3 savedPlayerWorldPos = RE::NiPoint3();  // Used for auto-reset distance check
@@ -590,4 +594,7 @@ public:
 
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
+	bool HasOverlaySupport() const;
+	std::string DescribeOpenVRCompatibilityIssue() const;
+	std::string DescribeOpenVROverlayIssue() const;
 };

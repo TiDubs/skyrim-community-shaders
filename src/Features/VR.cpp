@@ -81,16 +81,23 @@ void VR::SetupResources()
 
 	// Log OpenVR information
 	if (openVRInfo.isAvailable) {
+		const char* compatibilityState = openVRInfo.isCompatible ? "Yes" : "No";
 		logger::info("OpenVR DLL detected:");
 		logger::info("  Path: {}", openVRInfo.dllPath);
 		logger::info("  Version: {}", openVRInfo.version);
 		logger::info("  Size: {} bytes", openVRInfo.fileSize);
 		logger::info("  Modified: {}", openVRInfo.modificationTime);
-		logger::info("  Compatible: {}", openVRInfo.isCompatible ? "Yes" : "No");
+		logger::info("  Compatible: {}", compatibilityState);
 
 		if (!openVRInfo.isCompatible) {
-			logger::info("OpenVR version is incompatible.");
-			logger::info("Community Shaders VR menus will be disabled for stability");
+			const std::string& warning = openVRInfo.compatibilityWarning;
+			if (!warning.empty()) {
+				logger::warn("OpenVR compatibility issue: {}", warning);
+			} else {
+				logger::warn("OpenVR runtime did not pass compatibility checks. VR features will be disabled.");
+			}
+		} else if (!openVRInfo.overlayWarning.empty()) {
+			logger::warn("OpenVR overlay support is limited: {}", openVRInfo.overlayWarning);
 		}
 	} else {
 		logger::info("OpenVR DLL not available in current process");
@@ -126,7 +133,7 @@ void VR::EarlyPrepass()
 void VR::DrawOverlay()
 {
 	auto& vr = globals::features::vr;
-	if (!vr.openVRInfo.isCompatible)
+	if (!vr.HasOverlaySupport())
 		return;
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
@@ -187,6 +194,7 @@ namespace
 	void DrawDragSettings();
 	void DrawKeyBindings();
 	void DrawDebugSection();
+	void DrawOverlayUnavailableMessage();
 }
 
 void VR::DrawSettings()
@@ -209,14 +217,20 @@ void VR::DrawSettings()
 		}
 
 		// Key Bindings Tab
-		if (openVRInfo.isCompatible) {
-			if (ImGui::BeginTabItem("Bindings")) {
-				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
+		if (ImGui::BeginTabItem("Bindings")) {
+			if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
+				if (HasOverlaySupport()) {
 					DrawKeyBindings();
+				} else {
+					std::string warning = openVRInfo.overlayWarning;
+					if (warning.empty()) {
+						warning = "OpenVR overlay interface is unavailable. VR key bindings are disabled.";
+					}
+					ImGui::TextWrapped("%s", warning.c_str());
 				}
-				ImGui::EndChild();
-				ImGui::EndTabItem();
 			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 		// Debug Tab (existing debug functionality)
 		if (ImGui::BeginTabItem("Debug")) {
@@ -428,13 +442,25 @@ void VR::DrawSettings()
 
 namespace
 {
+	void DrawOverlayUnavailableMessage()
+	{
+		auto& vr = globals::features::vr;
+		std::string warning = vr.openVRInfo.overlayWarning;
+		if (warning.empty()) {
+			warning = "OpenVR overlay interface is unavailable. VR-specific UI has been disabled.";
+		}
+		ImGui::TextWrapped("%s", warning.c_str());
+	}
+
 	void DrawControllerInputInstructions()
 	{
 		auto& vr = globals::features::vr;
 		auto& settings = vr.settings;
-		if (!vr.openVRInfo.isCompatible)
-			return;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (!vr.HasOverlaySupport()) {
+				DrawOverlayUnavailableMessage();
+				return;
+			}
 			ImGui::SliderInt("Auto-hide Welcome overlay timeout", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
 				settings.kAutoHideSeconds <= 0 ? "Hidden" : "%d seconds");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -576,9 +602,11 @@ namespace
 	{
 		auto& vr = globals::features::vr;
 		auto& settings = vr.settings;
-		if (!vr.openVRInfo.isCompatible)
-			return;
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (!vr.HasOverlaySupport()) {
+				DrawOverlayUnavailableMessage();
+				return;
+			}
 			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, VR::Config::kMinMenuScale, VR::Config::kMaxMenuScale, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
 			ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods));
@@ -632,10 +660,12 @@ namespace
 	void DrawMouseSettings()
 	{
 		auto& vr = globals::features::vr;
-		if (!vr.openVRInfo.isCompatible)
-			return;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (!vr.HasOverlaySupport()) {
+				DrawOverlayUnavailableMessage();
+				return;
+			}
 			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 50.0f, "%.2f");
 		}
@@ -644,10 +674,12 @@ namespace
 	void DrawDragSettings()
 	{
 		auto& vr = globals::features::vr;
-		if (!vr.openVRInfo.isCompatible)
-			return;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Drag Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (!vr.HasOverlaySupport()) {
+				DrawOverlayUnavailableMessage();
+				return;
+			}
 			if (ImGui::CollapsingHeader("Drag Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
 				ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
@@ -1332,8 +1364,12 @@ void VR::UpdateVROverlayControllerPosition()
 void VR::EnsureOverlayInitialized()
 {
 	// Check OpenVR compatibility first
-	if (!openVRInfo.isCompatible) {
-		logger::warn("OpenVR version is incompatible.");
+	if (!HasOverlaySupport()) {
+		std::string warning = openVRInfo.overlayWarning;
+		if (warning.empty()) {
+			warning = "OpenVR overlay interface is unavailable.";
+		}
+		logger::debug("Skipping overlay initialization: {}", warning);
 		return;
 	}
 
@@ -1417,8 +1453,8 @@ void VR::RecreateOverlayTexturesIfNeeded()
 
 void VR::SubmitOverlayFrame()
 {
-	// Skip overlay operations if OpenVR is incompatible
-	if (!openVRInfo.isCompatible) {
+	// Skip overlay operations if required OpenVR interfaces are unavailable
+	if (!HasOverlaySupport()) {
 		return;
 	}
 
@@ -2277,6 +2313,8 @@ void VR::DetectOpenVRInfo()
 	HMODULE hModule = GetModuleHandleA("openvr_api.dll");
 	if (!hModule) {
 		openVRInfo.isAvailable = false;
+		openVRInfo.isCompatible = false;
+		openVRInfo.compatibilityWarning = "OpenVR runtime is not loaded.";
 		return;
 	}
 
@@ -2286,6 +2324,7 @@ void VR::DetectOpenVRInfo()
 	char dllPath[MAX_PATH];
 	if (GetModuleFileNameA(hModule, dllPath, MAX_PATH) == 0) {
 		openVRInfo.isCompatible = false;
+		openVRInfo.compatibilityWarning = "Failed to query openvr_api.dll path.";
 		return;
 	}
 
@@ -2329,8 +2368,26 @@ void VR::DetectOpenVRInfo()
 			st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 	}
 
-	// Check compatibility
-	openVRInfo.isCompatible = IsOpenVRCompatible();
+	// Capture interface availability for diagnostics
+	Util::OpenVRContext ctx;
+	openVRInfo.hasSystemInterface = ctx.IsValid();
+	openVRInfo.hasOverlayInterface = ctx.HasOverlay();
+
+	// Check compatibility and capture warnings
+	openVRInfo.compatibilityWarning = DescribeOpenVRCompatibilityIssue();
+	openVRInfo.isCompatible = openVRInfo.compatibilityWarning.empty();
+	if (!openVRInfo.isCompatible && openVRInfo.compatibilityWarning.empty()) {
+		openVRInfo.compatibilityWarning = "OpenVR runtime did not expose required interfaces.";
+	}
+
+	if (openVRInfo.hasSystemInterface && !openVRInfo.hasOverlayInterface) {
+		openVRInfo.overlayWarning = DescribeOpenVROverlayIssue();
+		if (openVRInfo.overlayWarning.empty()) {
+			openVRInfo.overlayWarning = "OpenVR overlay interface is missing.";
+		}
+	} else {
+		openVRInfo.overlayWarning.clear();
+	}
 }
 
 bool VR::IsOpenVRCompatible() const
@@ -2339,24 +2396,60 @@ bool VR::IsOpenVRCompatible() const
 		return false;
 	}
 
-	// Whitelist: Only allow explicitly known compatible versions
-	struct WhitelistedVersion
-	{
-		std::string version;
-		uint64_t fileSize;
-		std::string modificationTime;
-	};
-
-	static const std::vector<WhitelistedVersion> whitelist = {
-		{ "1.0.10.0", 598816, "2022-04-18 00:47:59" },
-		// Add more known compatible versions here
-	};
-
-	for (const auto& entry : whitelist) {
-		if (openVRInfo.version == entry.version) {
-			return true;
-		}
+	if (!openVRInfo.compatibilityWarning.empty()) {
+		return false;
 	}
 
-	return false;  // Not compatible unless explicitly whitelisted
+	Util::OpenVRContext ctx;
+	return ctx.IsValid();
+}
+
+bool VR::HasOverlaySupport() const
+{
+	if (!openVRInfo.isAvailable || !openVRInfo.isCompatible) {
+		return false;
+	}
+
+	Util::OpenVRContext ctx;
+	return ctx.HasOverlay();
+}
+
+std::string VR::DescribeOpenVRCompatibilityIssue() const
+{
+	if (!openVRInfo.isAvailable) {
+		return "OpenVR runtime is not loaded.";
+	}
+
+	Util::OpenVRContext ctx;
+	if (!ctx.openvr) {
+		return "BSOpenVR context is unavailable.";
+	}
+
+	if (!ctx.system) {
+		return "OpenVR system interface is missing.";
+	}
+
+	return {};
+}
+
+std::string VR::DescribeOpenVROverlayIssue() const
+{
+	if (!openVRInfo.isAvailable) {
+		return "OpenVR runtime is not loaded.";
+	}
+
+	Util::OpenVRContext ctx;
+	if (!ctx.openvr) {
+		return "BSOpenVR context is unavailable.";
+	}
+
+	if (!ctx.system) {
+		return "OpenVR system interface is missing.";
+	}
+
+	if (!ctx.overlay) {
+		return "OpenVR overlay interface is missing.";
+	}
+
+	return {};
 }
