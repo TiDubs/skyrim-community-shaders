@@ -8,6 +8,7 @@
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
 #include <Windows.h>
+#include <algorithm>
 #include <directx/d3dx12.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -1371,8 +1372,18 @@ void Upscaling::Upscale()
 		{
 			// Set up upscaling data constant buffer
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-			UpscalingDataCB upscalingData;
+			UpscalingDataCB upscalingData{};
 			upscalingData.trueSamplingDim = renderSize;
+
+			const float totalWidth = std::max(renderSize.x, 0.0f);
+			upscalingData.leftEyeBounds = { 0.0f, totalWidth };
+			upscalingData.rightEyeBounds = { totalWidth, totalWidth };
+
+			if (REL::Module::IsVR() && totalWidth > 0.0f) {
+				const float baseEyeWidth = totalWidth * 0.5f;
+				upscalingData.leftEyeBounds = { 0.0f, baseEyeWidth };
+				upscalingData.rightEyeBounds = { baseEyeWidth, totalWidth };
+			}
 
 			upscalingDataCB->Update(upscalingData);
 			auto upscalingBuffer = upscalingDataCB->CB();

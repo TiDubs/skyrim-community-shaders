@@ -2,8 +2,9 @@
 
 cbuffer UpscalingData : register(b0)
 {
-	float2 TrueSamplingDim;  // BufferDim.xy * ResolutionScale
-	float2 pad0;
+	float2 TrueSamplingDim;   // BufferDim.xy * ResolutionScale
+	float2 LeftEyeBounds;     // [min, max) for the left eye in pixels
+	float2 RightEyeBounds;    // [min, max) for the right eye in pixels (degenerates for mono)
 };
 
 Texture2D<float2> TAAMask : register(t0);
@@ -29,6 +30,15 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 	float depth = DepthMask[dispatchID.xy];
 
+	bool stereoActive = RightEyeBounds.y > RightEyeBounds.x;
+	float eyeStart = LeftEyeBounds.x;
+	float eyeEnd = LeftEyeBounds.y;
+	if (stereoActive && float(dispatchID.x) >= RightEyeBounds.x) {
+		eyeStart = RightEyeBounds.x;
+		eyeEnd = RightEyeBounds.y;
+	}
+	const float eyeMaxExclusive = max(eyeEnd, eyeStart + 1.0f);
+
 #if defined(DLSS) || defined(XESS)
 	// Find longest motion vector in 5x5 neighborhood
 	float2 motionVector = MotionVectorMask[dispatchID.xy];
@@ -45,6 +55,11 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 			// Skip samples outside true sampling dimensions
 			if (any(samplePos < 0) || any(samplePos >= int2(TrueSamplingDim)))
 				continue;
+
+			if (stereoActive) {
+				float clampedX = clamp(float(samplePos.x), eyeStart, eyeMaxExclusive - 1.0f);
+				samplePos.x = int(clampedX);
+			}
 
 			float neighborDepth = DepthMask[samplePos];
 
