@@ -47,10 +47,68 @@ inline constexpr bool dependent_false_v = false;
 template <class AllocateFunc>
 sl::Result InvokeAllocateResources(AllocateFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
 {
+    // Streamline has shipped multiple variations of the resource allocation entry point.
+    // Probe a set of known signatures so we remain compatible with SDK updates.
+    sl::ViewportHandle* viewportPtr = &viewport;
+
     if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle&>) {
         return func(feature, viewport);
     } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
         return func(feature, &viewport, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, uint32_t, sl::ViewportHandle*>) {
+        return func(feature, 1u, &viewport);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle**, uint32_t>) {
+        return func(feature, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, uint32_t, sl::ViewportHandle**>) {
+        return func(feature, 1u, &viewportPtr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle*, uint32_t>) {
+        return func(feature, nullptr, &viewport, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle*>) {
+        return func(feature, nullptr, 1u, &viewport);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t, std::nullptr_t>) {
+        return func(feature, &viewport, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, std::nullptr_t, uint32_t>) {
+        return func(feature, &viewport, nullptr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle*, std::nullptr_t>) {
+        return func(feature, nullptr, &viewport, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, std::nullptr_t, sl::ViewportHandle*>) {
+        return func(feature, nullptr, nullptr, &viewport);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle**, uint32_t>) {
+        return func(feature, nullptr, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle**>) {
+        return func(feature, nullptr, 1u, &viewportPtr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle**, uint32_t, std::nullptr_t>) {
+        return func(feature, &viewportPtr, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle**, std::nullptr_t, uint32_t>) {
+        return func(feature, &viewportPtr, nullptr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle**, std::nullptr_t>) {
+        return func(feature, nullptr, &viewportPtr, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, std::nullptr_t, sl::ViewportHandle**>) {
+        return func(feature, nullptr, nullptr, &viewportPtr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle*, uint32_t>) {
+        return func(feature, nullptr, 0u, &viewport, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle**, uint32_t>) {
+        return func(feature, nullptr, 0u, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, uint32_t, std::nullptr_t, sl::ViewportHandle*, uint32_t>) {
+        return func(feature, 0u, nullptr, &viewport, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, uint32_t, std::nullptr_t, sl::ViewportHandle**, uint32_t>) {
+        return func(feature, 0u, nullptr, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t, std::nullptr_t, uint32_t>) {
+        return func(feature, &viewport, 1u, nullptr, 0u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle**, uint32_t, std::nullptr_t, uint32_t>) {
+        return func(feature, &viewportPtr, 1u, nullptr, 0u);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle*, uint32_t, std::nullptr_t>) {
+        return func(feature, nullptr, &viewport, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle**, uint32_t, std::nullptr_t>) {
+        return func(feature, nullptr, &viewportPtr, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle*, uint32_t, std::nullptr_t>) {
+        return func(feature, nullptr, 0u, &viewport, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle**, uint32_t, std::nullptr_t>) {
+        return func(feature, nullptr, 0u, &viewportPtr, 1u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t, std::nullptr_t, uint32_t, std::nullptr_t>) {
+        return func(feature, &viewport, 1u, nullptr, 0u, nullptr);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle**, uint32_t, std::nullptr_t, uint32_t, std::nullptr_t>) {
+        return func(feature, &viewportPtr, 1u, nullptr, 0u, nullptr);
     } else {
         static_assert(dependent_false_v<AllocateFunc>, "Unsupported slAllocateResources signature");
     }
@@ -59,10 +117,49 @@ sl::Result InvokeAllocateResources(AllocateFunc func, sl::Feature feature, sl::V
 template <class FreeFunc>
 void InvokeFreeResources(FreeFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
 {
+    // slFreeResources follows the same evolution as slAllocateResources; handle the observed variants.
+    sl::ViewportHandle* viewportPtr = &viewport;
+
     if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle&>) {
         func(feature, viewport);
     } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
         func(feature, &viewport, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, uint32_t, sl::ViewportHandle*>) {
+        func(feature, 1u, &viewport);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle**>) {
+        func(feature, &viewportPtr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle**, uint32_t>) {
+        func(feature, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle*>) {
+        func(feature, nullptr, &viewport);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle*>) {
+        func(feature, nullptr, 1u, &viewport);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, std::nullptr_t>) {
+        func(feature, &viewport, nullptr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, std::nullptr_t, uint32_t>) {
+        func(feature, &viewport, nullptr, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle*, std::nullptr_t>) {
+        func(feature, nullptr, &viewport, nullptr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, std::nullptr_t, sl::ViewportHandle*>) {
+        func(feature, nullptr, nullptr, &viewport);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle**, uint32_t>) {
+        func(feature, nullptr, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle**>) {
+        func(feature, nullptr, 1u, &viewportPtr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle**, uint32_t, std::nullptr_t>) {
+        func(feature, &viewportPtr, 1u, nullptr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle**, std::nullptr_t, uint32_t>) {
+        func(feature, &viewportPtr, nullptr, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, sl::ViewportHandle**, std::nullptr_t>) {
+        func(feature, nullptr, &viewportPtr, nullptr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, std::nullptr_t, sl::ViewportHandle**>) {
+        func(feature, nullptr, nullptr, &viewportPtr);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, std::nullptr_t, uint32_t, sl::ViewportHandle**, uint32_t>) {
+        func(feature, nullptr, 0u, &viewportPtr, 1u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, uint32_t, std::nullptr_t, uint32_t>) {
+        func(feature, &viewport, 1u, nullptr, 0u);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle**, uint32_t, std::nullptr_t, uint32_t>) {
+        func(feature, &viewportPtr, 1u, nullptr, 0u);
     } else {
         static_assert(dependent_false_v<FreeFunc>, "Unsupported slFreeResources signature");
     }
