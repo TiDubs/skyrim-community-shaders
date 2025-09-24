@@ -1,7 +1,9 @@
 #include "Streamline.h"
 
 #include <cstring>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 #include <dxgi.h>
 #include <dxgi1_3.h>
@@ -41,31 +43,159 @@ static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 	return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
 }
 
+enum class StreamlineArgKind
+{
+    None,
+    Feature,
+    ViewportPointer,
+    NullPointer,
+    OtherPointer,
+    Other
+};
+
+struct StreamlineArgState
+{
+    StreamlineArgKind lastKind = StreamlineArgKind::None;
+    std::size_t integralIndex = 0;
+};
+
+template <class>
+struct FunctionTraits;
+
+template <class R, class... Args>
+struct FunctionTraits<R(Args...)>
+{
+    using args = std::tuple<Args...>;
+    static constexpr std::size_t arity = sizeof...(Args);
+};
+
+template <class R, class... Args>
+struct FunctionTraits<R (*)(Args...)> : FunctionTraits<R(Args...)>
+{};
+
+#ifdef _WIN32
+template <class R, class... Args>
+struct FunctionTraits<R(__stdcall*)(Args...)> : FunctionTraits<R(Args...)>
+{};
+
+template <class R, class... Args>
+struct FunctionTraits<R(__cdecl*)(Args...)> : FunctionTraits<R(Args...)>
+{};
+
+template <class R, class... Args>
+struct FunctionTraits<R(__fastcall*)(Args...)> : FunctionTraits<R(Args...)>
+{};
+
+template <class R, class... Args>
+struct FunctionTraits<R(__vectorcall*)(Args...)> : FunctionTraits<R(Args...)>
+{};
+#endif
+
 template <class T>
-inline constexpr bool dependent_false_v = false;
+T DetermineIntegralValue(StreamlineArgState& state)
+{
+    const T zero = static_cast<T>(0);
+    const T one = static_cast<T>(1);
+
+    T value = zero;
+
+    if (state.lastKind == StreamlineArgKind::ViewportPointer) {
+        value = one;
+    } else if (state.lastKind == StreamlineArgKind::NullPointer || state.lastKind == StreamlineArgKind::OtherPointer) {
+        value = zero;
+    } else if (state.integralIndex == 0) {
+        value = one;
+    }
+
+    ++state.integralIndex;
+    return value;
+}
+
+template <class Param>
+auto PrepareStreamlineArgument(StreamlineArgState& state, sl::Feature feature, sl::ViewportHandle& viewport, sl::ViewportHandle*& viewportPtr, const sl::ViewportHandle*& constViewportPtr, const sl::ViewportHandle**& constViewportPtrPtr)
+{
+    using RawParam = std::remove_cv_t<std::remove_reference_t<Param>>;
+
+    if constexpr (std::is_same_v<RawParam, sl::Feature>) {
+        state.lastKind = StreamlineArgKind::Feature;
+        if constexpr (std::is_lvalue_reference_v<Param>) {
+            return static_cast<Param>(feature);
+        } else {
+            return static_cast<Param>(feature);
+        }
+    } else if constexpr (std::is_same_v<RawParam, sl::ViewportHandle>) {
+        state.lastKind = StreamlineArgKind::ViewportPointer;
+        return static_cast<Param>(viewport);
+    } else if constexpr (std::is_pointer_v<RawParam>) {
+        if constexpr (std::is_same_v<RawParam, sl::ViewportHandle*>) {
+            state.lastKind = StreamlineArgKind::ViewportPointer;
+            return reinterpret_cast<Param>(&viewport);
+        } else if constexpr (std::is_same_v<RawParam, sl::ViewportHandle**>) {
+            state.lastKind = StreamlineArgKind::ViewportPointer;
+            return reinterpret_cast<Param>(&viewportPtr);
+        } else if constexpr (std::is_same_v<RawParam, const sl::ViewportHandle*>) {
+            state.lastKind = StreamlineArgKind::ViewportPointer;
+            return reinterpret_cast<Param>(constViewportPtr);
+        } else if constexpr (std::is_same_v<RawParam, const sl::ViewportHandle**>) {
+            state.lastKind = StreamlineArgKind::ViewportPointer;
+            return reinterpret_cast<Param>(constViewportPtrPtr);
+        } else {
+            state.lastKind = StreamlineArgKind::OtherPointer;
+            return reinterpret_cast<Param>(nullptr);
+        }
+    } else if constexpr (std::is_same_v<RawParam, std::nullptr_t>) {
+        state.lastKind = StreamlineArgKind::NullPointer;
+        return nullptr;
+    } else if constexpr (std::is_integral_v<RawParam>) {
+        const auto value = DetermineIntegralValue<RawParam>(state);
+        state.lastKind = StreamlineArgKind::Other;
+        return static_cast<Param>(value);
+    } else if constexpr (std::is_enum_v<RawParam>) {
+        state.lastKind = StreamlineArgKind::Other;
+        return RawParam{};
+    } else if constexpr (std::is_lvalue_reference_v<Param>) {
+        static RawParam defaultValue{};
+        state.lastKind = StreamlineArgKind::Other;
+        return static_cast<Param>(defaultValue);
+    } else {
+        state.lastKind = StreamlineArgKind::Other;
+        return RawParam{};
+    }
+}
+
+template <class Func, class ArgsTuple, std::size_t... Indices>
+auto InvokeStreamlineFunctionImpl(Func func, sl::Feature feature, sl::ViewportHandle& viewport, std::index_sequence<Indices...>)
+{
+    StreamlineArgState state{};
+    sl::ViewportHandle* viewportPtr = &viewport;
+    const sl::ViewportHandle* constViewportPtr = &viewport;
+    const sl::ViewportHandle** constViewportPtrPtr = &constViewportPtr;
+
+    auto args = std::tuple{ PrepareStreamlineArgument<std::tuple_element_t<Indices, ArgsTuple>>(state, feature, viewport, viewportPtr, constViewportPtr, constViewportPtrPtr)... };
+    return std::apply(func, args);
+}
+
+template <class Func>
+auto InvokeStreamlineFunction(Func func, sl::Feature feature, sl::ViewportHandle& viewport)
+{
+    using DecayedFunc = std::decay_t<Func>;
+    using PointerType = std::conditional_t<std::is_pointer_v<DecayedFunc>, DecayedFunc, DecayedFunc*>;
+    using Traits = FunctionTraits<PointerType>;
+    using ArgsTuple = typename Traits::args;
+
+    return InvokeStreamlineFunctionImpl<Func, ArgsTuple>(func, feature, viewport, std::make_index_sequence<Traits::arity>{});
+}
 
 template <class AllocateFunc>
 sl::Result InvokeAllocateResources(AllocateFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
 {
-    if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle&>) {
-        return func(feature, viewport);
-    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
-        return func(feature, &viewport, 1u);
-    } else {
-        static_assert(dependent_false_v<AllocateFunc>, "Unsupported slAllocateResources signature");
-    }
+    return InvokeStreamlineFunction(func, feature, viewport);
 }
 
 template <class FreeFunc>
 void InvokeFreeResources(FreeFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
 {
-    if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle&>) {
-        func(feature, viewport);
-    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
-        func(feature, &viewport, 1u);
-    } else {
-        static_assert(dependent_false_v<FreeFunc>, "Unsupported slFreeResources signature");
-    }
+    InvokeStreamlineFunction(func, feature, viewport);
 }
 }
 
