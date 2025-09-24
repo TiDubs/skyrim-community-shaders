@@ -359,8 +359,8 @@ void VR::DrawSettings()
 			}
 
 			// Handle ENTER key to accept combo
-			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) || ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))) {
-				if (!this->recordedCombo.empty()) {
+            if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) || ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))) {
+                if (!this->recordedCombo.empty()) {
 					// Apply the recorded combo to the correct settings vector
 					switch (this->currentComboType) {
 					case VR::ComboType::MenuOpen:

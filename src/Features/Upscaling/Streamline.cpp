@@ -40,6 +40,33 @@ static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 
 	return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
 }
+
+template <class T>
+inline constexpr bool dependent_false_v = false;
+
+template <class AllocateFunc>
+sl::Result InvokeAllocateResources(AllocateFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
+{
+    if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle&>) {
+        return func(feature, viewport);
+    } else if constexpr (std::is_invocable_r_v<sl::Result, AllocateFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
+        return func(feature, &viewport, 1u);
+    } else {
+        static_assert(dependent_false_v<AllocateFunc>, "Unsupported slAllocateResources signature");
+    }
+}
+
+template <class FreeFunc>
+void InvokeFreeResources(FreeFunc func, sl::Feature feature, sl::ViewportHandle& viewport)
+{
+    if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle&>) {
+        func(feature, viewport);
+    } else if constexpr (std::is_invocable_v<FreeFunc, sl::Feature, sl::ViewportHandle*, uint32_t>) {
+        func(feature, &viewport, 1u);
+    } else {
+        static_assert(dependent_false_v<FreeFunc>, "Unsupported slFreeResources signature");
+    }
+}
 }
 
 void LoggingCallback(sl::LogType type, const char* msg)
@@ -524,10 +551,14 @@ void Streamline::DestroyDLSSResources()
 			continue;
 		}
 
-		slDLSSSetOptions(eye.viewport, dlssOptions);
-		slFreeResources(sl::kFeatureDLSS, eye.viewport);
-		ResetEyeState(eyeIndex);
-	}
+        slDLSSSetOptions(eye.viewport, dlssOptions);
+        if (slFreeResources != nullptr) {
+            InvokeFreeResources(slFreeResources, sl::kFeatureDLSS, eye.viewport);
+        } else {
+            logger::warn("[Streamline] slFreeResources unavailable while releasing viewport {}", eyeIndex);
+        }
+        ResetEyeState(eyeIndex);
+    }
 }
 
 bool Streamline::EnsureViewportAllocated(uint32_t eyeIndex)
@@ -545,15 +576,15 @@ bool Streamline::EnsureViewportAllocated(uint32_t eyeIndex)
 		return false;
 	}
 
-	const sl::Result result = slAllocateResources(sl::kFeatureDLSS, eye.viewport);
-	if (result != sl::Result::eOk) {
-		logger::error("[Streamline] Failed to allocate viewport {} (error: {})", eyeIndex, magic_enum::enum_name(result));
-		ResetEyeState(eyeIndex);
-		return false;
-	}
+    const sl::Result result = InvokeAllocateResources(slAllocateResources, sl::kFeatureDLSS, eye.viewport);
+    if (result != sl::Result::eOk) {
+        logger::error("[Streamline] Failed to allocate viewport {} (error: {})", eyeIndex, magic_enum::enum_name(result));
+        ResetEyeState(eyeIndex);
+        return false;
+    }
 
-	eye.constantsInitialized = false;
-	return true;
+    eye.constantsInitialized = false;
+    return true;
 }
 
 void Streamline::ResetEyeState(uint32_t eyeIndex)
