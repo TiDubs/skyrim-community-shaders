@@ -380,20 +380,19 @@ void Upscaling::PostPostLoad()
 	// Performs upscaling in between volumetric lighting and post processing
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 
-	if (!REL::Module::IsVR()) {
-		// Patches RSSetScissorRect calls to use dynamic resolution
-		// This is a PC-specific function hence it was missing
-		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
+    // Patches RSSetScissorRect calls to use dynamic resolution
+    stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
 
-		// Patches facegen texture generation to not use dynamic resolution
-		stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041));
+    if (!REL::Module::IsVR()) {
+        // Patches facegen texture generation to not use dynamic resolution
+        stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041)); // VR build lacks this relocation
 
-		// Patches precipitation camera to not use dynamic resolution
-		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+        // Patches precipitation camera to not use dynamic resolution
+        stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA)); // VR already renders that pass without DR
 
-		// Forces FXAA off
-		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
-	}
+        // Forces FXAA off
+        stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626)); // VR swapchain lacks this FXAA flag
+    }
 
 	logger::info("[Upscaling] Installed hooks");
 }
@@ -668,11 +667,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Delete or create resources as necessary
 	CheckResources(upscaleMethod);
 
-	// The game defaults this to a non-zero value
-	if (!globals::game::isVR) {
-		auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
-		fDRClampOffset->data.f = 0.0f;
-	}
+    // The game defaults this to a non-zero value
+    auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+    fDRClampOffset->data.f = 0.0f;
 
 	// Cache original TAA values for UI
 	projectionPosScaleX = a_viewport->projectionPosScaleX;
