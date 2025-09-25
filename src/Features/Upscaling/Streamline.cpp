@@ -1,5 +1,6 @@
 #include "Streamline.h"
 
+#include <algorithm>
 #include <cstring>
 #include <type_traits>
 
@@ -411,8 +412,11 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 			continue;
 		}
 
-		sl::Extent lowResExtent{ renderOffsetX, 0, currentRenderWidth, totalRenderHeight };
-		sl::Extent fullExtent{ outputOffsetX, 0, currentOutputWidth, totalOutputHeight };
+                const uint32_t renderEndX = std::min(renderOffsetX + currentRenderWidth, totalRenderWidth);
+                const uint32_t outputEndX = std::min(outputOffsetX + currentOutputWidth, totalOutputWidth);
+
+                sl::Extent lowResExtent{ renderOffsetX, 0, renderEndX, totalRenderHeight };
+                sl::Extent fullExtent{ outputOffsetX, 0, outputEndX, totalOutputHeight };
 
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
