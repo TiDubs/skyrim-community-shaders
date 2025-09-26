@@ -7,6 +7,7 @@
 #include <d3d12.h>
 
 #include <array>
+#include <limits>
 
 #define NV_WINDOWS
 
@@ -34,11 +35,20 @@ public:
 
 	bool featureDLSS = false;
 
-	struct EyeState
-	{
-		sl::ViewportHandle viewport{};
-		bool constantsInitialized = false;
-	};
+        struct EyeState
+        {
+                sl::ViewportHandle viewport{};
+                bool constantsInitialized = false;
+                bool resetThisFrame = false;
+                uint32_t lastRenderWidth = 0;
+                uint32_t lastRenderHeight = 0;
+                uint32_t lastRenderOffsetX = 0;
+                uint32_t lastOutputWidth = 0;
+                uint32_t lastOutputHeight = 0;
+                uint32_t lastOutputOffsetX = 0;
+                uint32_t lastQualityMode = std::numeric_limits<uint32_t>::max();
+                sl::DLSSPreset lastPreset = sl::DLSSPreset::eDefault;
+        };
 
 	std::array<EyeState, 2> eyes{};
 
