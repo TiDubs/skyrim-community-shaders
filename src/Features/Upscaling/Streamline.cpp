@@ -1,7 +1,13 @@
 #include "Streamline.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <iomanip>
+#include <limits>
+#include <optional>
+#include <sstream>
+#include <string_view>
 #include <type_traits>
 
 #include <dxgi.h>
@@ -28,8 +34,8 @@ static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 
 [[nodiscard]] bool AreViewportHandlesEqual(const sl::ViewportHandle& lhs, const sl::ViewportHandle& rhs) noexcept
 {
-	const bool lhsEmpty = !IsViewportAllocated(lhs);
-	const bool rhsEmpty = !IsViewportAllocated(rhs);
+        const bool lhsEmpty = !IsViewportAllocated(lhs);
+        const bool rhsEmpty = !IsViewportAllocated(rhs);
 
 	if (lhsEmpty && rhsEmpty) {
 		return true;
@@ -39,7 +45,41 @@ static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 		return false;
 	}
 
-	return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
+        return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
+}
+
+[[nodiscard]] std::string ViewportHandleToString(const sl::ViewportHandle& handle)
+{
+        std::ostringstream oss;
+        oss << "0x";
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&handle);
+        for (std::size_t i = 0; i < sizeof(handle); ++i) {
+                const std::size_t index = sizeof(handle) - 1u - i;
+                oss << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                    << static_cast<int>(bytes[index]);
+        }
+        return oss.str();
+}
+
+
+[[nodiscard]] std::optional<sl::DLSSMode> QualityModeToDlssMode(uint32_t qualityMode) noexcept
+{
+        if (qualityMode == std::numeric_limits<uint32_t>::max()) {
+                return std::nullopt;
+        }
+
+        switch (qualityMode) {
+        case 1:
+                return sl::DLSSMode::eMaxQuality;
+        case 2:
+                return sl::DLSSMode::eBalanced;
+        case 3:
+                return sl::DLSSMode::eMaxPerformance;
+        case 4:
+                return sl::DLSSMode::eUltraPerformance;
+        default:
+                return sl::DLSSMode::eDLAA;
+        }
 }
 
 
@@ -242,15 +282,19 @@ void Streamline::PostDevice()
  */
 void Streamline::CheckFrameConstants()
 {
-	if (!frameChecker.IsNewFrame() || !globals::features::upscaling.streamline.initialized) {
-		return;
-	}
+        if (!frameChecker.IsNewFrame() || !globals::features::upscaling.streamline.initialized) {
+                return;
+        }
 
-	slGetNewFrameToken(frameToken, &globals::state->frameCount);
+        slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
-	auto state = globals::state;
-	const bool isVR = globals::game::isVR;
-	const uint32_t eyeCount = isVR ? 2u : 1u;
+        auto state = globals::state;
+        const bool isVR = globals::game::isVR;
+        const uint32_t eyeCount = isVR ? 2u : 1u;
+
+        for (auto& eye : eyes) {
+                eye.resetThisFrame = false;
+        }
 
 	const float totalWidth = state->screenSize.x;
 	const float totalHeight = state->screenSize.y;
@@ -266,11 +310,11 @@ void Streamline::CheckFrameConstants()
 			continue;
 		}
 
-		auto& eye = eyes[eyeIndex];
+                auto& eye = eyes[eyeIndex];
 
-		sl::Constants slConstants{};
+                sl::Constants slConstants{};
 
-		float currentEyeWidth = isVR ? baseEyeWidth : totalWidth;
+                float currentEyeWidth = isVR ? baseEyeWidth : totalWidth;
 		if (isVR && eyeIndex == eyeCount - 1) {
 			const float consumedWidth = baseEyeWidth * static_cast<float>(eyeCount - 1);
 			currentEyeWidth = totalWidth - consumedWidth;
@@ -305,24 +349,26 @@ void Streamline::CheckFrameConstants()
 
 		recalculateCameraMatrices(slConstants);
 
-		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = eye.constantsInitialized ? sl::Boolean::eFalse : sl::Boolean::eTrue;
+                slConstants.jitterOffset = { -jitter.x, -jitter.y };
+                const bool needsReset = !eye.constantsInitialized;
+                slConstants.reset = needsReset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
 
-		slConstants.mvecScale = { isVR ? 0.5f : 1.0f, 1.0f };
-		slConstants.motionVectors3D = sl::Boolean::eFalse;
-		slConstants.motionVectorsInvalidValue = FLT_MIN;
-		slConstants.orthographicProjection = sl::Boolean::eFalse;
+                slConstants.mvecScale = { isVR ? 0.5f : 1.0f, 1.0f };
+                slConstants.motionVectors3D = sl::Boolean::eFalse;
+                slConstants.motionVectorsInvalidValue = FLT_MIN;
+                slConstants.orthographicProjection = sl::Boolean::eFalse;
 		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
 		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, eye.viewport);
-		if (setConstantsResult != sl::Result::eOk) {
-			logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
-			continue;
-		}
+                sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, eye.viewport);
+                if (setConstantsResult != sl::Result::eOk) {
+                        logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
+                        continue;
+                }
 
-		eye.constantsInitialized = true;
-	}
+                eye.constantsInitialized = true;
+                eye.resetThisFrame = needsReset;
+        }
 }
 
 
@@ -337,25 +383,10 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	sl::DLSSOptions baseDlssOptions{};
 
-	// Map quality mode to DLSS mode
-	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
-	switch (qualityMode) {
-	case 1:
-		baseDlssOptions.mode = sl::DLSSMode::eMaxQuality;
-		break;
-	case 2:
-		baseDlssOptions.mode = sl::DLSSMode::eBalanced;
-		break;
-	case 3:
-		baseDlssOptions.mode = sl::DLSSMode::eMaxPerformance;
-		break;
-	case 4:
-		baseDlssOptions.mode = sl::DLSSMode::eUltraPerformance;
-		break;
-	default:
-		baseDlssOptions.mode = sl::DLSSMode::eDLAA;
-		break;
-	}
+        // Map quality mode to DLSS mode
+        uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
+        const auto resolvedMode = QualityModeToDlssMode(qualityMode).value_or(sl::DLSSMode::eDLAA);
+        baseDlssOptions.mode = resolvedMode;
 
 	baseDlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 	baseDlssOptions.useAutoExposure = sl::Boolean::eTrue;
@@ -383,28 +414,29 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	const uint32_t baseOutputWidth = eyeCount > 0 ? totalOutputWidth / eyeCount : totalOutputWidth;
 	const uint32_t baseRenderWidth = eyeCount > 0 ? totalRenderWidth / eyeCount : totalRenderWidth;
 
-	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
-		if (!EnsureViewportAllocated(eyeIndex)) {
-			if (eyeCount > 1) {
-				logger::warn("[Streamline] Skipping DLSS for eye {} because the viewport handle is not allocated", eyeIndex);
-			}
+        for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+                if (!EnsureViewportAllocated(eyeIndex)) {
+                        if (eyeCount > 1) {
+                                logger::warn("[Streamline] Skipping DLSS for eye {} because the viewport handle is not allocated", eyeIndex);
+                        }
 			continue;
 		}
 
-		auto& eye = eyes[eyeIndex];
-		auto& activeViewport = eye.viewport;
+                auto& eye = eyes[eyeIndex];
+                auto& activeViewport = eye.viewport;
 
-		const uint32_t renderOffsetX = isVR ? baseRenderWidth * eyeIndex : 0u;
-		const uint32_t outputOffsetX = isVR ? baseOutputWidth * eyeIndex : 0u;
+                const uint32_t renderOffsetX = isVR ? baseRenderWidth * eyeIndex : 0u;
+                const uint32_t outputOffsetX = isVR ? baseOutputWidth * eyeIndex : 0u;
 
-		const uint32_t currentRenderWidth =
-			(isVR && eyeIndex == eyeCount - 1) ? (totalRenderWidth - renderOffsetX) : (isVR ? baseRenderWidth : totalRenderWidth);
-		const uint32_t currentOutputWidth =
-			(isVR && eyeIndex == eyeCount - 1) ? (totalOutputWidth - outputOffsetX) : (isVR ? baseOutputWidth : totalOutputWidth);
+                const uint32_t currentRenderWidth =
+                        (isVR && eyeIndex == eyeCount - 1) ? (totalRenderWidth - renderOffsetX) : (isVR ? baseRenderWidth : totalRenderWidth);
+                const uint32_t currentOutputWidth =
+                        (isVR && eyeIndex == eyeCount - 1) ? (totalOutputWidth - outputOffsetX) : (isVR ? baseOutputWidth : totalOutputWidth);
+                const uint32_t currentRenderHeight = totalRenderHeight;
 
-		sl::DLSSOptions dlssOptions = baseDlssOptions;
-		dlssOptions.outputWidth = currentOutputWidth;
-		dlssOptions.outputHeight = totalOutputHeight;
+                sl::DLSSOptions dlssOptions = baseDlssOptions;
+                dlssOptions.outputWidth = currentOutputWidth;
+                dlssOptions.outputHeight = totalOutputHeight;
 
 		sl::Result setOptionsResult = slDLSSSetOptions(activeViewport, dlssOptions);
 		if (setOptionsResult != sl::Result::eOk) {
@@ -431,17 +463,121 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		sl::Resource reactiveMask = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
 		sl::ResourceTag reactiveMaskTag = sl::ResourceTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
 
-		sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
-		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+                sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
+                sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
 
-		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
+                sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
 
-		slSetTag(activeViewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+                slSetTag(activeViewport, resourceTags, _countof(resourceTags), globals::d3d::context);
 
-		sl::ViewportHandle view(activeViewport);
-		const sl::BaseStructure* inputs[] = { &view };
-		slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
-	}
+                const auto modeName = magic_enum::enum_name(resolvedMode);
+                const auto presetName = magic_enum::enum_name(a_preset);
+                const auto previousModeOpt = QualityModeToDlssMode(eye.lastQualityMode);
+                const auto previousModeName = previousModeOpt ? magic_enum::enum_name(*previousModeOpt) : std::string_view("unknown");
+                const bool presetChanged = eye.lastPreset != a_preset;
+                const bool qualityChanged = eye.lastQualityMode != qualityMode;
+                const bool renderChanged = eye.lastRenderWidth != currentRenderWidth || eye.lastRenderHeight != currentRenderHeight || eye.lastRenderOffsetX != renderOffsetX;
+                const bool outputChanged = eye.lastOutputWidth != currentOutputWidth || eye.lastOutputHeight != totalOutputHeight || eye.lastOutputOffsetX != outputOffsetX;
+
+                if (presetChanged || qualityChanged || renderChanged || outputChanged) {
+                        if (eye.lastQualityMode == std::numeric_limits<uint32_t>::max()) {
+                                logger::info(
+                                        "[Streamline][DLSS] Eye {} initial config: qualityMode={} ({}) preset={} render={}x{} offset={} output={}x{} offset={}",
+                                        eyeIndex,
+                                        qualityMode,
+                                        modeName,
+                                        presetName,
+                                        currentRenderWidth,
+                                        currentRenderHeight,
+                                        renderOffsetX,
+                                        currentOutputWidth,
+                                        totalOutputHeight,
+                                        outputOffsetX);
+                        } else {
+                                const auto lastPresetName = magic_enum::enum_name(eye.lastPreset);
+                                logger::info(
+                                        "[Streamline][DLSS] Eye {} config change: qualityMode {} ({}) -> {} ({}), preset {} -> {}, render {}x{} @{} -> {}x{} @{}, output {}x{} @{} -> {}x{} @{}",
+                                        eyeIndex,
+                                        eye.lastQualityMode,
+                                        previousModeName,
+                                        qualityMode,
+                                        modeName,
+                                        lastPresetName,
+                                        presetName,
+                                        eye.lastRenderWidth,
+                                        eye.lastRenderHeight,
+                                        eye.lastRenderOffsetX,
+                                        currentRenderWidth,
+                                        currentRenderHeight,
+                                        renderOffsetX,
+                                        eye.lastOutputWidth,
+                                        eye.lastOutputHeight,
+                                        eye.lastOutputOffsetX,
+                                        currentOutputWidth,
+                                        totalOutputHeight,
+                                        outputOffsetX);
+                        }
+                }
+
+                const bool atlasUsed = renderOffsetX != 0u || outputOffsetX != 0u || currentRenderWidth != totalRenderWidth || currentOutputWidth != totalOutputWidth;
+                const auto jitter = globals::features::upscaling.jitter;
+                const float mvScaleX = isVR ? 0.5f : 1.0f;
+                const float mvScaleY = 1.0f;
+
+                logger::trace(
+                        "[Streamline][DLSS] Frame {} eye {} ({}) preset={} qualityMode={} ({}) render={}x{} offset={} output={}x{} offset={} dlssOutput={}x{} mvScale=({:.3f}, {:.3f}) jitter=({:.3f}, {:.3f}) reset={} viewport={} colorIn={} depth={} mvec={} colorOut={}",
+                        globals::state->frameCount,
+                        eyeIndex,
+                        eyeIndex == 0 ? 'L' : 'R',
+                        presetName,
+                        qualityMode,
+                        modeName,
+                        currentRenderWidth,
+                        currentRenderHeight,
+                        renderOffsetX,
+                        currentOutputWidth,
+                        totalOutputHeight,
+                        outputOffsetX,
+                        dlssOptions.outputWidth,
+                        dlssOptions.outputHeight,
+                        mvScaleX,
+                        mvScaleY,
+                        -jitter.x,
+                        -jitter.y,
+                        eye.resetThisFrame ? "true" : "false",
+                        ViewportHandleToString(activeViewport),
+                        fmt::ptr(a_upscalingTexture),
+                        fmt::ptr(depthTexture.texture),
+                        fmt::ptr(a_motionVectors),
+                        fmt::ptr(a_upscalingTexture));
+
+                if (atlasUsed) {
+                        logger::trace(
+                                "[Streamline][DLSS] Eye {} atlas input=[{}, {}, {}, {}] output=[{}, {}, {}, {}]",
+                                eyeIndex,
+                                lowResExtent.left,
+                                lowResExtent.top,
+                                lowResExtent.right,
+                                lowResExtent.bottom,
+                                fullExtent.left,
+                                fullExtent.top,
+                                fullExtent.right,
+                                fullExtent.bottom);
+                }
+
+                eye.lastQualityMode = qualityMode;
+                eye.lastPreset = a_preset;
+                eye.lastRenderWidth = currentRenderWidth;
+                eye.lastRenderHeight = currentRenderHeight;
+                eye.lastRenderOffsetX = renderOffsetX;
+                eye.lastOutputWidth = currentOutputWidth;
+                eye.lastOutputHeight = totalOutputHeight;
+                eye.lastOutputOffsetX = outputOffsetX;
+
+                sl::ViewportHandle view(activeViewport);
+                const sl::BaseStructure* inputs[] = { &view };
+                slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+        }
 }
 
 float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
@@ -577,6 +713,15 @@ void Streamline::ResetEyeState(uint32_t eyeIndex)
 		return;
 	}
 
-	eyes[eyeIndex].viewport = {};
-	eyes[eyeIndex].constantsInitialized = false;
+        eyes[eyeIndex].viewport = {};
+        eyes[eyeIndex].constantsInitialized = false;
+        eyes[eyeIndex].resetThisFrame = false;
+        eyes[eyeIndex].lastRenderWidth = 0;
+        eyes[eyeIndex].lastRenderHeight = 0;
+        eyes[eyeIndex].lastRenderOffsetX = 0;
+        eyes[eyeIndex].lastOutputWidth = 0;
+        eyes[eyeIndex].lastOutputHeight = 0;
+        eyes[eyeIndex].lastOutputOffsetX = 0;
+        eyes[eyeIndex].lastQualityMode = std::numeric_limits<uint32_t>::max();
+        eyes[eyeIndex].lastPreset = sl::DLSSPreset::eDefault;
 }
