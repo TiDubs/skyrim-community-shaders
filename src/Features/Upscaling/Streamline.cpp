@@ -3,9 +3,15 @@
 #include <algorithm>
 #include <cstring>
 #include <type_traits>
+#include <cfloat>
+#include <vector>
+#include <cstdint>
+#include <string>
+#include <filesystem>
 
 #include <dxgi.h>
 #include <dxgi1_3.h>
+#include <d3d11.h>
 
 #include <magic_enum.hpp>
 
@@ -16,32 +22,27 @@
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 
+static ID3D11Texture2D* gDlssOutTex = nullptr; // output texture for upscaling
+
 namespace
 {
 static_assert(std::is_trivially_copyable_v<sl::ViewportHandle>);
 
 [[nodiscard]] bool IsViewportAllocated(const sl::ViewportHandle& handle) noexcept
 {
-	const sl::ViewportHandle kEmpty{};
-	return std::memcmp(&handle, &kEmpty, sizeof(kEmpty)) != 0;
-}
+	// Consider both all-zero and all-ones bit patterns as invalid/unallocated
+	sl::ViewportHandle zero{};
+	sl::ViewportHandle ones{};
+	std::memset(&ones, 0xFF, sizeof(ones));
 
-[[nodiscard]] bool AreViewportHandlesEqual(const sl::ViewportHandle& lhs, const sl::ViewportHandle& rhs) noexcept
-{
-	const bool lhsEmpty = !IsViewportAllocated(lhs);
-	const bool rhsEmpty = !IsViewportAllocated(rhs);
-
-	if (lhsEmpty && rhsEmpty) {
-		return true;
-	}
-
-	if (lhsEmpty != rhsEmpty) {
+	if (std::memcmp(&handle, &zero, sizeof(handle)) == 0) {
 		return false;
 	}
-
-	return std::memcmp(&lhs, &rhs, sizeof(sl::ViewportHandle)) == 0;
+	if (std::memcmp(&handle, &ones, sizeof(handle)) == 0) {
+		return false;
+	}
+	return true;
 }
-
 
 }
 
@@ -156,6 +157,7 @@ void Streamline::LoadInterposer()
 		pref.logLevel = sl::LogLevel::eOff;
 		break;
 	}
+pref.logLevel = sl::LogLevel::eVerbose;  //TEMP
 	pref.logMessageCallback = LoggingCallback;
 	pref.showConsole = false;
 
@@ -164,6 +166,7 @@ void Streamline::LoadInterposer()
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
 
 	pref.renderAPI = sl::RenderAPI::eD3D11;
+
 	pref.flags = sl::PreferenceFlags::eUseManualHooking;
 
 	// Hook up all of the functions exported by the SL Interposer Library
@@ -221,17 +224,34 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 
 void Streamline::PostDevice()
 {
-	// Hook up all of the feature functions using the sl function slGetFeatureFunction
+	if (!featureDLSS) {
+		return;
+	}
 
-	if (featureDLSS) {
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
-
-		const uint32_t eyeCount = globals::game::isVR ? 2u : 1u;
-		for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
-			EnsureViewportAllocated(eyeIndex);
+	// 1) Bind the D3D11 device to Streamline (required for manual hooking)
+	if (slSetD3DDevice && globals::d3d::context) {
+		ID3D11Device* dev = nullptr;
+		globals::d3d::context->GetDevice(&dev);
+		if (dev) {
+			sl::Result r = slSetD3DDevice(dev);
+			if (r != sl::Result::eOk) {
+				logger::error("[Streamline] slSetD3DDevice failed: {}", (int)r);
+			}
+			dev->Release();
+		} else {
+			logger::error("[Streamline] D3D11 device is null; cannot set for Streamline");
 		}
+	}
+
+	// 2) Fetch DLSS entry points
+	slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
+	slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
+	slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
+
+	// 3) Assign stable per-eye viewport handles (no allocation here)
+	const uint32_t eyeCount = globals::game::isVR ? 2u : 1u;
+	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
+		EnsureViewportAllocated(eyeIndex);
 	}
 }
 
@@ -252,86 +272,93 @@ void Streamline::CheckFrameConstants()
 	const bool isVR = globals::game::isVR;
 	const uint32_t eyeCount = isVR ? 2u : 1u;
 
+	// Ensure at least the left-eye viewport exists
+	if (!EnsureViewportAllocated(0)) {
+		return;
+	}
+
+	// If ANY eye hasn't been initialized yet, assert reset once for both
+	bool resetThisFrame = false;
+	for (uint32_t i = 0; i < eyeCount; ++i) {
+		if (!eyes[i].constantsInitialized) {
+			resetThisFrame = true;
+			break;
+		}
+	}
+
 	const float totalWidth = state->screenSize.x;
 	const float totalHeight = state->screenSize.y;
 	const float safeHeight = totalHeight > 0.0f ? totalHeight : 1.0f;
-	const float baseEyeWidth = eyeCount > 0 ? totalWidth / static_cast<float>(eyeCount) : totalWidth;
+
 	const float cameraFov = Util::GetVerticalFOVRad();
 	const float cameraNear = *globals::game::cameraNear;
 	const float cameraFar = *globals::game::cameraFar;
 	const auto jitter = globals::features::upscaling.jitter;
 
-	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
-		if (!EnsureViewportAllocated(eyeIndex)) {
-			continue;
-		}
+	// Build a single set of constants for the frame
+	sl::Constants slConstants{};
 
-		auto& eye = eyes[eyeIndex];
+	// IMPORTANT: "common" values must be IDENTICAL for all viewports, and set once
+	const float perEyeWidth = isVR ? (totalWidth * 0.5f) : totalWidth;
+	const float aspectCommon = perEyeWidth / safeHeight;
+	slConstants.cameraAspectRatio = aspectCommon;
+	slConstants.cameraFOV = cameraFov;
+	slConstants.cameraNear = cameraNear;
+	slConstants.cameraFar = cameraFar;
 
-		sl::Constants slConstants{};
+	slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+	slConstants.cameraPinholeOffset = { 0.f, 0.f };
+	slConstants.depthInverted = sl::Boolean::eFalse;
+	slConstants.jitterOffset = { -jitter.x, -jitter.y };
+	slConstants.reset = resetThisFrame ? sl::Boolean::eTrue : sl::Boolean::eFalse;
 
-		float currentEyeWidth = isVR ? baseEyeWidth : totalWidth;
-		if (isVR && eyeIndex == eyeCount - 1) {
-			const float consumedWidth = baseEyeWidth * static_cast<float>(eyeCount - 1);
-			currentEyeWidth = totalWidth - consumedWidth;
-		}
+	slConstants.mvecScale = { isVR ? 0.5f : 1.0f, 1.0f };
+	slConstants.motionVectors3D = sl::Boolean::eFalse;
+	slConstants.motionVectorsInvalidValue = FLT_MIN;
+	slConstants.orthographicProjection = sl::Boolean::eFalse;
+	slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+	slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		if (currentEyeWidth <= 0.0f) {
-			currentEyeWidth = baseEyeWidth > 0.0f ? baseEyeWidth : totalWidth;
-			if (currentEyeWidth <= 0.0f) {
-				currentEyeWidth = 1.0f;
-			}
-		}
+	// Use LEFT eye (0) for the matrices we must provide; right eye will use tags/extents for its region
+	const uint32_t refEye = 0;
+	const auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse(refEye).Transpose();
+	slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
+	slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
+	slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
 
-		slConstants.cameraAspectRatio = currentEyeWidth / safeHeight;
-		slConstants.cameraFOV = cameraFov;
-		slConstants.cameraNear = cameraNear;
-		slConstants.cameraFar = cameraFar;
+	const auto& cameraPosAdjust = globals::game::frameBufferCached.GetCameraPosAdjust(refEye);
+	slConstants.cameraPos = { cameraPosAdjust.x, cameraPosAdjust.y, cameraPosAdjust.z };
 
-		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
-		slConstants.cameraPinholeOffset = { 0.f, 0.f };
+	const auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered(refEye).Transpose();
+	std::memcpy(&slConstants.cameraViewToClip, &cameraViewToClip, sizeof(slConstants.cameraViewToClip));
 
-		const auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse(eyeIndex).Transpose();
-		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
-		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
-		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
+	recalculateCameraMatrices(slConstants);
 
-		const auto& cameraPosAdjust = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
-		slConstants.cameraPos = { cameraPosAdjust.x, cameraPosAdjust.y, cameraPosAdjust.z };
+	sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, eyes[refEye].viewport);
+	if (setConstantsResult != sl::Result::eOk) {
+		logger::error("[Streamline] slSetConstants failed (err={})", (int)setConstantsResult);
+		return;
+	}
 
-		const auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered(eyeIndex).Transpose();
-		std::memcpy(&slConstants.cameraViewToClip, &cameraViewToClip, sizeof(slConstants.cameraViewToClip));
-		slConstants.depthInverted = sl::Boolean::eFalse;
-
-		recalculateCameraMatrices(slConstants);
-
-		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = eye.constantsInitialized ? sl::Boolean::eFalse : sl::Boolean::eTrue;
-
-		slConstants.mvecScale = { isVR ? 0.5f : 1.0f, 1.0f };
-		slConstants.motionVectors3D = sl::Boolean::eFalse;
-		slConstants.motionVectorsInvalidValue = FLT_MIN;
-		slConstants.orthographicProjection = sl::Boolean::eFalse;
-		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
-		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
-
-		sl::Result setConstantsResult = slSetConstants(slConstants, *frameToken, eye.viewport);
-		if (setConstantsResult != sl::Result::eOk) {
-			logger::error("[Streamline] Could not set constants for viewport {}", eyeIndex);
-			continue;
-		}
-
-		eye.constantsInitialized = true;
+	// Mark both eyes initialized for this frame so Upscale() can proceed
+	for (uint32_t i = 0; i < eyeCount; ++i) {
+		eyes[i].constantsInitialized = true;
 	}
 }
-
 
 void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
-	auto state = globals::state;
+	// Keep stereo consistent if any eye is missing constants
+	for (uint32_t i = 0, n = globals::game::isVR ? 2u : 1u; i < n; ++i) {
+		if (!eyes[i].constantsInitialized) {
+			logger::warn("[DLSSVR] Skipping frame: constants not initialized for eye {}", (int)i);
+			return;
+		}
+	}
 
+	auto state = globals::state;
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
@@ -359,10 +386,8 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	baseDlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 	baseDlssOptions.useAutoExposure = sl::Boolean::eTrue;
-
 	baseDlssOptions.preExposure = 1.0f;
 	baseDlssOptions.sharpness = 0.0f;
-
 	baseDlssOptions.dlaaPreset = a_preset;
 	baseDlssOptions.qualityPreset = a_preset;
 	baseDlssOptions.balancedPreset = a_preset;
@@ -377,70 +402,240 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	const uint32_t totalOutputWidth = static_cast<uint32_t>(screenSize.x);
 	const uint32_t totalOutputHeight = static_cast<uint32_t>(screenSize.y);
-	const uint32_t totalRenderWidth = static_cast<uint32_t>(renderSize.x);
-	const uint32_t totalRenderHeight = static_cast<uint32_t>(renderSize.y);
 
-	const uint32_t baseOutputWidth = eyeCount > 0 ? totalOutputWidth / eyeCount : totalOutputWidth;
-	const uint32_t baseRenderWidth = eyeCount > 0 ? totalRenderWidth / eyeCount : totalRenderWidth;
+	//Ensure (or create) the private atlas-sized DLSS output texture once per frame
+	if (!a_upscalingTexture || !a_motionVectors || !depthTexture.texture) {
+		logger::warn("[DLSSVR] Missing required resource(s): color={}, mvec={}, depth={}",
+			(void*)a_upscalingTexture, (void*)a_motionVectors, (void*)depthTexture.texture);
+		return;
+	}
 
+	{
+		ID3D11Device* dev = nullptr;
+		globals::d3d::context->GetDevice(&dev);
+
+		ID3D11Texture2D* inTex2D = nullptr;
+		HRESULT qi = a_upscalingTexture ? a_upscalingTexture->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&inTex2D) : E_POINTER;
+
+		if (dev && SUCCEEDED(qi) && inTex2D) {
+			D3D11_TEXTURE2D_DESC inDesc{};
+			inTex2D->GetDesc(&inDesc);
+			
+			if (inDesc.SampleDesc.Count > 1) {
+				logger::warn("[DLSSVR] Input color is MSAA ({}x). DLSS expects non-MSAA color.", inDesc.SampleDesc.Count);
+			}
+
+			bool needNew = (gDlssOutTex == nullptr);
+			
+			DXGI_FORMAT resourceFormat = inDesc.Format; // Keep the resource format identical to the input atlas so CopySubresourceRegion is trivially compatible.
+
+			if (!needNew) {
+				D3D11_TEXTURE2D_DESC outDesc{};
+				gDlssOutTex->GetDesc(&outDesc);
+				if (outDesc.Width != totalOutputWidth ||
+					outDesc.Height != totalOutputHeight ||
+					outDesc.Format != resourceFormat ||
+					outDesc.SampleDesc.Count != 1) {
+					gDlssOutTex->Release();
+					gDlssOutTex = nullptr;
+					needNew = true;
+				}
+			}
+
+			if (needNew) {
+				D3D11_TEXTURE2D_DESC outDesc = inDesc;
+				outDesc.Width = totalOutputWidth;
+				outDesc.Height = totalOutputHeight;
+				outDesc.Format = resourceFormat;  // match input atlas
+				outDesc.MipLevels = 1;
+
+				// Non-MSAA + UAV-capable
+				outDesc.SampleDesc.Count = 1;
+				outDesc.SampleDesc.Quality = 0;
+				outDesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+
+				HRESULT hr = dev->CreateTexture2D(&outDesc, nullptr, &gDlssOutTex);
+				if (FAILED(hr) || !gDlssOutTex) {
+					// Fall back to a guaranteed UAV format if input format was not UAV-capable
+					outDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+					hr = dev->CreateTexture2D(&outDesc, nullptr, &gDlssOutTex);
+					if (FAILED(hr) || !gDlssOutTex) {
+						logger::error("[DLSSVR] Failed to create DLSS output texture even after FP16 fallback (hr=0x{:08X})", (unsigned)hr);
+						if (inTex2D)
+							inTex2D->Release();
+						if (dev)
+							dev->Release();
+						return;// bail this frame
+					}
+				} 
+			}
+		}
+
+		if (inTex2D)
+			inTex2D->Release();
+		if (dev)
+			dev->Release();
+
+		if (!gDlssOutTex) {
+			logger::error("[DLSSVR] gDlssOutTex is null; cannot run DLSS this frame");
+			return;
+		}
+	}
+
+	// Probe actual resource sizes. We will build low res extents from these
+	D3D11_TEXTURE2D_DESC colorInDesc{};
+	{
+		ID3D11Texture2D* t = nullptr;
+		if (!a_upscalingTexture || FAILED(a_upscalingTexture->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&t)) || !t) {
+			logger::error("[DLSSVR] Invalid color input resource");
+			return;
+		}
+		t->GetDesc(&colorInDesc);
+		t->Release();
+	}
+
+	D3D11_TEXTURE2D_DESC mvDesc{};
+	if (a_motionVectors) {
+		ID3D11Texture2D* t = nullptr;
+		if (SUCCEEDED(a_motionVectors->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&t)) && t) {
+			t->GetDesc(&mvDesc);
+			t->Release();
+		}
+	}
+
+	D3D11_TEXTURE2D_DESC depthDesc{};
+	if (depthTexture.texture) {
+		ID3D11Texture2D* t = nullptr;
+		if (SUCCEEDED(depthTexture.texture->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&t)) && t) {
+			t->GetDesc(&depthDesc);
+			t->Release();
+		}
+	}
+
+	// Are we actually upscaling? (input atlas smaller than output atlas)
+	const bool isUpscaling = (colorInDesc.Width < totalOutputWidth) || (colorInDesc.Height < totalOutputHeight);
+	const bool isDLAA = (baseDlssOptions.mode == sl::DLSSMode::eDLAA);
+
+	// Per-eye work
 	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; ++eyeIndex) {
 		if (!EnsureViewportAllocated(eyeIndex)) {
 			if (eyeCount > 1) {
-				logger::warn("[Streamline] Skipping DLSS for eye {} because the viewport handle is not allocated", eyeIndex);
+				logger::warn("[DLSSVR] Skipping DLSS for eye {} (no viewport)", (int)eyeIndex);
 			}
-			continue;
+			return;  // keep both eyes consistent
 		}
 
-		auto& eye = eyes[eyeIndex];
-		auto& activeViewport = eye.viewport;
+		auto& activeViewport = eyes[eyeIndex].viewport;
 
-		const uint32_t renderOffsetX = isVR ? baseRenderWidth * eyeIndex : 0u;
-		const uint32_t outputOffsetX = isVR ? baseOutputWidth * eyeIndex : 0u;
+		// Per eye OUTPUT extents (final atlas)
+		const uint32_t outBaseW = eyeCount ? (totalOutputWidth / eyeCount) : totalOutputWidth;
+		const uint32_t outOffX = isVR ? outBaseW * eyeIndex : 0u;
+		const uint32_t outCurrW = (isVR && eyeIndex == eyeCount - 1) ? (totalOutputWidth - outOffX) : (isVR ? outBaseW : totalOutputWidth);
+		const uint32_t outEndX = std::min(outOffX + outCurrW, totalOutputWidth);
+		const sl::Extent fullExtent{ outOffX, 0, outEndX, totalOutputHeight };
 
-		const uint32_t currentRenderWidth =
-			(isVR && eyeIndex == eyeCount - 1) ? (totalRenderWidth - renderOffsetX) : (isVR ? baseRenderWidth : totalRenderWidth);
-		const uint32_t currentOutputWidth =
-			(isVR && eyeIndex == eyeCount - 1) ? (totalOutputWidth - outputOffsetX) : (isVR ? baseOutputWidth : totalOutputWidth);
+		// Per eye INPUT (low-res) extents. derive from actual input atlas size
+		const uint32_t lowAtlasW = colorInDesc.Width;
+		const uint32_t lowAtlasH = colorInDesc.Height;
+		const uint32_t lowBaseW = eyeCount ? (lowAtlasW / eyeCount) : lowAtlasW;
+		const uint32_t lowOffX = isVR ? lowBaseW * eyeIndex : 0u;
+		const uint32_t lowCurrW = (isVR && eyeIndex == eyeCount - 1) ? (lowAtlasW - lowOffX) : (isVR ? lowBaseW : lowAtlasW);
+		const uint32_t lowEndX = std::min(lowOffX + lowCurrW, lowAtlasW);
+		const sl::Extent lowExtentColor{ lowOffX, 0, lowEndX, lowAtlasH };
 
-		sl::DLSSOptions dlssOptions = baseDlssOptions;
-		dlssOptions.outputWidth = currentOutputWidth;
-		dlssOptions.outputHeight = totalOutputHeight;
-
-		sl::Result setOptionsResult = slDLSSSetOptions(activeViewport, dlssOptions);
-		if (setOptionsResult != sl::Result::eOk) {
-			logger::critical("[Streamline] Could not enable DLSS for viewport {}", eyeIndex);
-			continue;
+		// Motion vectors / depth may live at different (low-res) atlases; prefer their own sizes if provided
+		sl::Extent lowExtentMV = lowExtentColor;
+		if (mvDesc.Width && mvDesc.Height) {
+			const uint32_t mvBaseW = eyeCount ? (mvDesc.Width / eyeCount) : mvDesc.Width;
+			const uint32_t mvOffX = isVR ? mvBaseW * eyeIndex : 0u;
+			const uint32_t mvCurrW = (isVR && eyeIndex == eyeCount - 1) ? (mvDesc.Width - mvOffX) : (isVR ? mvBaseW : mvDesc.Width);
+			const uint32_t mvEndX = std::min(mvOffX + mvCurrW, mvDesc.Width);
+			lowExtentMV = sl::Extent{ mvOffX, 0, mvEndX, mvDesc.Height };
 		}
 
-                const uint32_t renderEndX = std::min(renderOffsetX + currentRenderWidth, totalRenderWidth);
-                const uint32_t outputEndX = std::min(outputOffsetX + currentOutputWidth, totalOutputWidth);
+		sl::Extent lowExtentDepth = lowExtentColor;
+		if (depthDesc.Width && depthDesc.Height) {
+			const uint32_t dBaseW = eyeCount ? (depthDesc.Width / eyeCount) : depthDesc.Width;
+			const uint32_t dOffX = isVR ? dBaseW * eyeIndex : 0u;
+			const uint32_t dCurrW = (isVR && eyeIndex == eyeCount - 1) ? (depthDesc.Width - dOffX) : (isVR ? dBaseW : depthDesc.Width);
+			const uint32_t dEndX = std::min(dOffX + dCurrW, depthDesc.Width);
+			lowExtentDepth = sl::Extent{ dOffX, 0, dEndX, depthDesc.Height };
+		}
 
-                sl::Extent lowResExtent{ renderOffsetX, 0, renderEndX, totalRenderHeight };
-                sl::Extent fullExtent{ outputOffsetX, 0, outputEndX, totalOutputHeight };
-
+		// Tag resources
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, gDlssOutTex, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
 
-		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &lowResExtent };
-		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+		std::vector<sl::ResourceTag> tags;
+		tags.reserve(6);
+		tags.push_back({ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &lowExtentColor });
+		tags.push_back({ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &fullExtent });
+		tags.push_back({ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilEvaluate, &lowExtentDepth });
+		tags.push_back({ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilEvaluate, &lowExtentMV });
 
-		sl::Resource reactiveMask = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
-		sl::ResourceTag reactiveMaskTag = sl::ResourceTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+		if (a_reactiveMask) {
+			static sl::Resource reactive{};
+			reactive = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
+			tags.push_back({ &reactive, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilEvaluate, &lowExtentColor });
+		}
+		if (a_transparencyCompositionMask) {
+			static sl::Resource transp{};
+			transp = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
+			tags.push_back({ &transp, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilEvaluate, &lowExtentColor });
+		}
 
-		sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
-		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+		slSetTag(activeViewport, tags.data(), (uint32_t)tags.size(), globals::d3d::context);
 
-		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
+		// Debug: show whether we are upscaling and the per-eye sizes
+		logger::info("[DLSSVR] eye={} isDLAA={} isUpscaling={} inAtlas={}x{} perEyeInW={} perEyeOutW={} outAtlas={}x{}",
+			(int)eyeIndex, isDLAA ? 1 : 0, isUpscaling ? 1 : 0, lowAtlasW, lowAtlasH, lowEndX - lowOffX, outEndX - outOffX, totalOutputWidth, totalOutputHeight);
 
-		slSetTag(activeViewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+		// Options: per-eye OUTPUT size; choose DLAA only if per-eye input == per-eye output
+		sl::DLSSOptions dlssOptions = baseDlssOptions;
 
+		// Per-eye same res check (DLAA only when low == out)
+		const bool sameResPerEye = (lowCurrW == outCurrW) && (lowAtlasH == totalOutputHeight);
+		if (sameResPerEye) {
+			dlssOptions.mode = sl::DLSSMode::eDLAA;  // identical res then DLAA - should never get hit unless DLAA is already chosen, but is required by streamline
+		}
+
+		// Set the final output size we are asking DLSS for (per-eye width, full height)
+		dlssOptions.outputWidth = outCurrW;
+		dlssOptions.outputHeight = totalOutputHeight;
+
+		logger::info("[DLSSVR] eye={} mode={} out={}x{} low={}x{}",
+			(int)eyeIndex,
+			(int)dlssOptions.mode,
+			dlssOptions.outputWidth, dlssOptions.outputHeight,
+			lowCurrW, lowAtlasH);
+
+		sl::Result setOptionsResult = slDLSSSetOptions(activeViewport, dlssOptions);
+		if (setOptionsResult != sl::Result::eOk) {
+			logger::critical("[DLSSVR] SetOptions failed eye={} err={}", (int)eyeIndex, (int)setOptionsResult);
+			return;  // keep both eyes consistent
+		}
+
+		// Evaluate
 		sl::ViewportHandle view(activeViewport);
 		const sl::BaseStructure* inputs[] = { &view };
-		slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+		sl::Result evalRes = slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+		if (evalRes != sl::Result::eOk) {
+			logger::warn("[DLSSVR] slEvaluateFeature returned {}", (int)evalRes);
+			return;  // keep both eyes consistent
+		}
+
+		// Copy back the upscaled sub-rect to the game's atlas
+		D3D11_BOX box{};
+		box.left = outOffX;
+		box.right = outEndX;
+		box.top = 0;
+		box.bottom = totalOutputHeight;
+		box.front = 0;
+		box.back = 1;
+
+		globals::d3d::context->CopySubresourceRegion(a_upscalingTexture, 0, outOffX, 0, 0, gDlssOutTex, 0, &box);
 	}
 }
 
@@ -474,7 +669,7 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	dlssOptions.mode = dlssMode;
 	dlssOptions.outputWidth = outputWidth;
 	dlssOptions.outputHeight = outputHeight;
-	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue; /* could be a bad assumptioon, but Streamline::Upscale already tags our input color as HDR when we actually invoke DLSS, because the render target we hand over is the HDR scene buffer. Once we started reusing GetInputResolutionScale() for the VR per-eye path, I mirrored that flag inside the optimal-settings query so slDLSSGetOptimalSettings runs with the same assumptions as the real DLSS evaluation. Without explicitly setting colorBuffersHDR there, the helper would treat the request as an LDR workload and could suggest a mismatched render size.*/
+	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue; /* could be a bad assumption, but Streamline::Upscale already tags our input color as HDR when we actually invoke DLSS, because the render target we hand over is the HDR scene buffer. Once we started reusing GetInputResolutionScale() for the VR per-eye path, I mirrored that flag inside the optimal-settings query so slDLSSGetOptimalSettings runs with the same assumptions as the real DLSS evaluation. Without explicitly setting colorBuffersHDR there, the helper would treat the request as an LDR workload and could suggest a mismatched render size.*/
 
 	sl::DLSSOptimalSettings optimalSettings{};
 	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
@@ -507,6 +702,11 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
  */
 void Streamline::DestroyDLSSResources()
 {
+	if (gDlssOutTex) {
+		gDlssOutTex->Release();
+		gDlssOutTex = nullptr;
+	}
+
 	bool anyAllocated = false;
 	for (const auto& eye : eyes) {
 		if (IsViewportAllocated(eye.viewport)) {
@@ -531,43 +731,31 @@ void Streamline::DestroyDLSSResources()
 		}
 
 		slDLSSSetOptions(eye.viewport, dlssOptions);
-		if (slFreeResources != nullptr) {
-			slFreeResources(sl::kFeatureDLSS, eye.viewport);
-		} else {
-			logger::warn("[Streamline] slFreeResources unavailable while releasing viewport {}", eyeIndex);
-		}
+
+		// No manual slFreeResources for D3D11, interposer manages this.
+
 		ResetEyeState(eyeIndex);
 	}
 }
 
 bool Streamline::EnsureViewportAllocated(uint32_t eyeIndex)
 {
-	if (eyeIndex >= static_cast<uint32_t>(eyes.size())) {
+	if (eyeIndex >= static_cast<uint32_t>(eyes.size()))
 		return false;
-	}
+	if (!featureDLSS)
+		return false;
 
 	auto& eye = eyes[eyeIndex];
-	if (IsViewportAllocated(eye.viewport)) {
+
+	// Already allocated? Reuse as-is
+	if (IsViewportAllocated(eye.viewport))
 		return true;
-	}
 
-	if (!featureDLSS || slAllocateResources == nullptr) {
-		return false;
-	}
+	// First-time assignment: stable, non-zero per-eye handle
+	const uint64_t id = 0x100ull + static_cast<uint64_t>(eyeIndex);
+	std::memset(&eye.viewport, 0, sizeof(eye.viewport));
+	std::memcpy(&eye.viewport, &id, std::min(sizeof(eye.viewport), sizeof(id)));
 
-	if (!IsViewportAllocated(eye.viewport)) {
-		// Streamline expects the caller to provide a unique, non-zero viewport handle identifier.
-		eye.viewport = sl::ViewportHandle(eyeIndex + 1u);
-		}
-
-	const sl::Result result = slAllocateResources(globals::d3d::context, sl::kFeatureDLSS, eye.viewport);
-	if (result != sl::Result::eOk) {
-		logger::error("[Streamline] Failed to allocate viewport {} (error: {})", eyeIndex, magic_enum::enum_name(result));
-		ResetEyeState(eyeIndex);
-		return false;
-	}
-
-	eye.constantsInitialized = false;
 	return true;
 }
 
