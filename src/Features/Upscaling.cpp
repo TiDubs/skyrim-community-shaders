@@ -9,6 +9,15 @@
 #include "Upscaling/XeSS.h"
 #include <Windows.h>
 #include <algorithm>
+
+namespace
+{
+    [[nodiscard]] bool ShouldLockDynamicResolution(const float2& scale)
+    {
+        constexpr float kLockThreshold = 0.9999f;
+        return scale.x >= kLockThreshold && scale.y >= kLockThreshold;
+    }
+}
 #include <directx/d3dx12.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -738,9 +747,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	dynamicResolutionWidthRatio = resolutionScale.x;
 	dynamicResolutionHeightRatio = resolutionScale.y;
 
-	// Disable dynamic resolution unless the game explictly enables it
-	if (!globals::game::isVR)
-		runtimeData.dynamicResolutionLock = 1;
+    // Keep the ratios adjustable whenever we are actually rendering at a reduced resolution.
+    runtimeData.dynamicResolutionLock = ShouldLockDynamicResolution(resolutionScale);
 }
 
 void Upscaling::SetupResources()
@@ -1502,8 +1510,8 @@ void Upscaling::PerformUpscaling()
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
 
-	// Disable dynamic resolution past this point
-	runtimeData.dynamicResolutionLock = 1;
+    // Keep the lock engaged only when we are effectively running at native resolution.
+    runtimeData.dynamicResolutionLock = ShouldLockDynamicResolution(resolutionScale);
 
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
