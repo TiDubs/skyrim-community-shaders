@@ -159,9 +159,9 @@ void TerrainBlending::BlendPrepassDepths()
 		ID3D11UnorderedAccessView* uavs[2] = { blendedDepthTexture->uav.get(), blendedDepthTexture16->uav.get() };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-		auto depthBlendShader = GetDepthBlendShader();
-		auto dispatchCount = Util::GetScreenDispatchCount(depthBlendShader);
-		context->CSSetShader(depthBlendShader, nullptr, 0);
+		auto depthBlendComputeShader = GetDepthBlendShader();
+		auto dispatchCount = Util::GetScreenDispatchCount(depthBlendComputeShader);
+		context->CSSetShader(depthBlendComputeShader, nullptr, 0);
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
