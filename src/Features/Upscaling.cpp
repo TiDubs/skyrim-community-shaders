@@ -1356,8 +1356,6 @@ void Upscaling::Upscale()
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	auto dispatchCount = Util::GetScreenDispatchCount(true);
-
 	{
 		state->BeginPerfEvent("Encode Upscaling Textures");
 
@@ -1409,7 +1407,9 @@ void Upscaling::Upscale()
 			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
+			auto encodeShader = GetEncodeTexturesCS();
+			auto dispatchCount = Util::GetScreenDispatchCount(encodeShader, true);
+			context->CSSetShader(encodeShader, nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}

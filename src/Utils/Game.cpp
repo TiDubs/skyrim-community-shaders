@@ -1,5 +1,6 @@
 #include "Game.h"
 
+#include "D3D.h"
 #include "State.h"
 
 namespace Util
@@ -162,15 +163,20 @@ namespace Util
 			a_size.y * runtimeData.dynamicResolutionHeightRatio);
 	}
 
-	DispatchCount GetScreenDispatchCount(bool a_dynamic)
+	DispatchCount GetScreenDispatchCount(ID3D11ComputeShader* a_shader, bool a_dynamic)
 	{
 		float2 resolution = globals::state->screenSize;
 
-		if (a_dynamic)
-			ConvertToDynamic(resolution);
+		if (a_dynamic) {
+			resolution = ConvertToDynamic(resolution);
+		}
 
-		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
-		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);
+		auto groupSize = GetComputeThreadGroupSize(a_shader);
+		const float groupWidth = groupSize.x > 0 ? static_cast<float>(groupSize.x) : 8.0f;
+		const float groupHeight = groupSize.y > 0 ? static_cast<float>(groupSize.y) : 8.0f;
+
+		uint dispatchX = static_cast<uint>(std::ceil(resolution.x / groupWidth));
+		uint dispatchY = static_cast<uint>(std::ceil(resolution.y / groupHeight));
 
 		return { dispatchX, dispatchY };
 	}

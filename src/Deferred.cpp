@@ -423,8 +423,6 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
-	auto dispatchCount = Util::GetScreenDispatchCount(true);
-
 	if (ssgi.loaded) {
 		// Ambient Composite
 		{
@@ -448,6 +446,7 @@ void Deferred::DeferredPasses()
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
 			auto shader = interior ? GetComputeAmbientCompositeInterior() : GetComputeAmbientComposite();
+			auto dispatchCount = Util::GetScreenDispatchCount(shader, true);
 			context->CSSetShader(shader, nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
@@ -506,6 +505,7 @@ void Deferred::DeferredPasses()
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		auto shader = interior ? GetComputeMainCompositeInterior() : GetComputeMainComposite();
+		auto dispatchCount = Util::GetScreenDispatchCount(shader, true);
 		context->CSSetShader(shader, nullptr, 0);
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);

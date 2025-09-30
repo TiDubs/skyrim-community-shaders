@@ -152,8 +152,6 @@ void TerrainBlending::BlendPrepassDepths()
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	auto dispatchCount = Util::GetScreenDispatchCount();
-
 	{
 		ID3D11ShaderResourceView* views[2] = { depthSRVBackup, terrainDepth.depthSRV };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
@@ -161,7 +159,9 @@ void TerrainBlending::BlendPrepassDepths()
 		ID3D11UnorderedAccessView* uavs[2] = { blendedDepthTexture->uav.get(), blendedDepthTexture16->uav.get() };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-		context->CSSetShader(GetDepthBlendShader(), nullptr, 0);
+		auto depthBlendShader = GetDepthBlendShader();
+		auto dispatchCount = Util::GetScreenDispatchCount(depthBlendShader);
+		context->CSSetShader(depthBlendShader, nullptr, 0);
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
