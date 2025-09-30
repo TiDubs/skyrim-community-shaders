@@ -119,7 +119,7 @@ namespace Util
 		uint x;
 		uint y;
 	};
-	DispatchCount GetScreenDispatchCount(bool a_dynamic = true);
+	DispatchCount GetScreenDispatchCount(ID3D11ComputeShader* a_shader = nullptr, bool a_dynamic = true);
 
 	/**
 	 * @brief Checks if dynamic resolution is currently enabled.

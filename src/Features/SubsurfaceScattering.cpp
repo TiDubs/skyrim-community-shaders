@@ -204,9 +204,6 @@ void SubsurfaceScattering::DrawSSS()
 	TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering");
 
 	validMaterials = false;
-
-	auto dispatchCount = Util::GetScreenDispatchCount();
-
 	{
 		auto cameraData = Util::GetCameraData(0);
 
@@ -257,6 +254,7 @@ void SubsurfaceScattering::DrawSSS()
 				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
 
 				auto shader = GetComputeShaderHorizontalBlur();
+				auto dispatchCount = Util::GetScreenDispatchCount(shader);
 				context->CSSetShader(shader, nullptr, 0);
 
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
@@ -276,6 +274,7 @@ void SubsurfaceScattering::DrawSSS()
 				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
 				auto shader = GetComputeShaderVerticalBlur();
+				auto dispatchCount = Util::GetScreenDispatchCount(shader);
 				context->CSSetShader(shader, nullptr, 0);
 
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
@@ -286,6 +285,7 @@ void SubsurfaceScattering::DrawSSS()
 				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Burley");
 
 				auto shader = GetComputeShaderBurley();
+				auto dispatchCount = Util::GetScreenDispatchCount(shader);
 				context->CSSetShader(shader, nullptr, 0);
 
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);

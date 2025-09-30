@@ -5,6 +5,39 @@
 
 #include <d3dcompiler.h>
 #include <mutex>
+#include <wrl/client.h>
+
+namespace
+{
+	constexpr GUID kComputeThreadGroupSizeGuid =
+	        { 0x7ea0399b, 0x7b2d, 0x41f1, 0x9d, 0x4d, 0x2c, 0x9b, 0xf2, 0x1a, 0x55, 0x7a };
+
+	struct ThreadGroupSizeData
+	{
+		std::uint32_t x;
+		std::uint32_t y;
+		std::uint32_t z;
+	};
+
+	void StoreComputeThreadGroupSize(ID3D11ComputeShader* shader, ID3DBlob* shaderBlob)
+	{
+		if (!shader || !shaderBlob)
+			return;
+
+		Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflector;
+		if (FAILED(D3DReflect(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(),
+		                IID_PPV_ARGS(reflector.GetAddressOf())))) {
+			return;
+		}
+
+		D3D11_SHADER_DESC desc{};
+		if (FAILED(reflector->GetDesc(&desc)))
+			return;
+
+		ThreadGroupSizeData data{ desc.ThreadGroupSizeX, desc.ThreadGroupSizeY, desc.ThreadGroupSizeZ };
+		shader->SetPrivateData(kComputeThreadGroupSizeGuid, sizeof(data), &data);
+	}
+}  // namespace
 
 namespace Util
 {
@@ -207,17 +240,32 @@ namespace Util
 			ID3D11DomainShader* regShader;
 			device->CreateDomainShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
 			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_5_0")) {
+		} else if (!_stricmp(ProgramType, "cs_5_0") || !_stricmp(ProgramType, "cs_4_0")) {
 			ID3D11ComputeShader* regShader;
 			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_4_0")) {
-			ID3D11ComputeShader* regShader;
-			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
+			StoreComputeThreadGroupSize(regShader, shaderBlob);
 			return regShader;
 		}
 
 		return nullptr;
+	}
+
+	ThreadGroupSize GetComputeThreadGroupSize(ID3D11ComputeShader* shader)
+	{
+		ThreadGroupSize size{ 8u, 8u, 1u };
+
+		if (!shader)
+			return size;
+
+		ThreadGroupSizeData data{};
+		UINT dataSize = sizeof(data);
+		if (SUCCEEDED(shader->GetPrivateData(kComputeThreadGroupSizeGuid, &dataSize, &data)) && dataSize == sizeof(data)) {
+			size.x = data.x != 0 ? data.x : size.x;
+			size.y = data.y != 0 ? data.y : size.y;
+			size.z = data.z != 0 ? data.z : size.z;
+		}
+
+		return size;
 	}
 
 	// RAII wrapper for D3D mapped resources
