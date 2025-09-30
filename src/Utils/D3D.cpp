@@ -3,6 +3,7 @@
 #include "State.h"
 #include "Utils/Format.h"
 
+#include <d3d11shader.h>
 #include <d3dcompiler.h>
 #include <mutex>
 #include <wrl/client.h>
@@ -30,11 +31,12 @@ namespace
 			return;
 		}
 
-		D3D11_SHADER_DESC desc{};
-		if (FAILED(reflector->GetDesc(&desc)))
-			return;
-
-		ThreadGroupSizeData data{ desc.ThreadGroupSizeX, desc.ThreadGroupSizeY, desc.ThreadGroupSizeZ };
+		ThreadGroupSizeData data{ 8u, 8u, 1u };
+		if (SUCCEEDED(reflector->GetThreadGroupSize(&data.x, &data.y, &data.z))) {
+			data.x = data.x != 0 ? data.x : 8u;
+			data.y = data.y != 0 ? data.y : 8u;
+			data.z = data.z != 0 ? data.z : 1u;
+		}
 		shader->SetPrivateData(kComputeThreadGroupSizeGuid, sizeof(data), &data);
 	}
 }  // namespace
