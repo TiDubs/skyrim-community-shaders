@@ -343,6 +343,8 @@ void Streamline::CheckFrameConstants()
 	// Mark both eyes initialized for this frame so Upscale() can proceed
 	for (uint32_t i = 0; i < eyeCount; ++i) {
 		eyes[i].constantsInitialized = true;
+		EnsureViewportAllocated(i);
+		AllocateResourcesIfNeeded(i);
 	}
 }
 
@@ -588,6 +590,11 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 		slSetTag(activeViewport, tags.data(), (uint32_t)tags.size(), globals::d3d::context);
 
+		if (!AllocateResourcesIfNeeded(eyeIndex)) {
+			logger::warn("[DLSSVR] Failed to allocate Streamline resources for eye {}", (int)eyeIndex);
+			return;  // keep both eyes consistent
+		}
+
 		// Debug: show whether we are upscaling and the per-eye sizes
 		logger::info("[DLSSVR] eye={} isDLAA={} isUpscaling={} inAtlas={}x{} perEyeInW={} perEyeOutW={} outAtlas={}x{}",
 			(int)eyeIndex, isDLAA ? 1 : 0, isUpscaling ? 1 : 0, lowAtlasW, lowAtlasH, lowEndX - lowOffX, outEndX - outOffX, totalOutputWidth, totalOutputHeight);
@@ -756,6 +763,49 @@ bool Streamline::EnsureViewportAllocated(uint32_t eyeIndex)
 	std::memset(&eye.viewport, 0, sizeof(eye.viewport));
 	std::memcpy(&eye.viewport, &id, std::min(sizeof(eye.viewport), sizeof(id)));
 
+	eye.resourcesAllocated = false;
+
+	return true;
+}
+
+bool Streamline::AllocateResourcesIfNeeded(uint32_t eyeIndex)
+{
+	if (!featureDLSS)
+		return true;
+	if (eyeIndex >= static_cast<uint32_t>(eyes.size()))
+		return false;
+
+	auto& eye = eyes[eyeIndex];
+	if (!IsViewportAllocated(eye.viewport))
+		return false;
+	if (eye.resourcesAllocated)
+		return true;
+	if (!slAllocateResources) {
+		static bool loggedMissing = false;
+		if (!loggedMissing) {
+			logger::warn("[Streamline] slAllocateResources entry point is unavailable; skipping explicit allocation");
+			loggedMissing = true;
+		}
+		return true;
+	}
+	if (!frameToken) {
+		logger::warn("[Streamline] Cannot allocate resources without a valid frame token");
+		return false;
+	}
+	if (!globals::d3d::context) {
+		logger::error("[Streamline] Cannot allocate resources without a D3D11 context");
+		return false;
+	}
+
+	sl::ViewportHandle view(eye.viewport);
+	const sl::BaseStructure* inputs[] = { &view };
+	sl::Result allocateResult = slAllocateResources(*frameToken, inputs, _countof(inputs), globals::d3d::context);
+	if (allocateResult != sl::Result::eOk) {
+		logger::error("[Streamline] slAllocateResources failed eye={} err={}", (int)eyeIndex, (int)allocateResult);
+		return false;
+	}
+
+	eye.resourcesAllocated = true;
 	return true;
 }
 
@@ -767,4 +817,5 @@ void Streamline::ResetEyeState(uint32_t eyeIndex)
 
 	eyes[eyeIndex].viewport = {};
 	eyes[eyeIndex].constantsInitialized = false;
+	eyes[eyeIndex].resourcesAllocated = false;
 }

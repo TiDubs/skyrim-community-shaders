@@ -38,6 +38,7 @@ public:
 	{
 		sl::ViewportHandle viewport{};
 		bool constantsInitialized = false;
+		bool resourcesAllocated = false;
 	};
 
 	std::array<EyeState, 2> eyes{};
@@ -90,5 +91,6 @@ public:
 
 	private:
 		bool EnsureViewportAllocated(uint32_t eyeIndex);
+		bool AllocateResourcesIfNeeded(uint32_t eyeIndex);
 		void ResetEyeState(uint32_t eyeIndex);
 };
