@@ -797,15 +797,9 @@ bool Streamline::AllocateResourcesIfNeeded(uint32_t eyeIndex)
 	const sl::BaseStructure* inputs[] = { &view };
 	const uint32_t inputCount = static_cast<uint32_t>(_countof(inputs));
 
-	// The Streamline SDK bundled with the project exposes slAllocateResources with the
-	// signature `sl::Result(sl::CommandBuffer*, sl::Feature, const sl::BaseStructure* const*, uint32_t)`.
-	// If this ever changes we need to update the call site accordingly.
+	// The Streamline SDK bundled with the project exposes slAllocateResources with the signature `sl::Result(sl::CommandBuffer*, sl::Feature, const sl::BaseStructure* const*, uint32_t)`. If this ever changes we need to update the call site accordingly.
 	static_assert(std::is_invocable_r_v<sl::Result, PFun_slAllocateResources, sl::CommandBuffer*, sl::Feature, const sl::BaseStructure* const*, uint32_t>,
 		"Unexpected slAllocateResources signature; update Streamline::AllocateResourcesIfNeeded");
-
-	// Earlier Streamline SDK drops bundled with the project expected a frame token argument here.
-	// The hard-coded signature above confirms we are targeting the newer variant that omits it,
-	// so there is no frame token to validate prior to allocation.
 
 	sl::Result allocateResult = slAllocateResources(globals::d3d::context, sl::kFeatureDLSS, inputs, inputCount);
 
