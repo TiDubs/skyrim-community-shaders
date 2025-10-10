@@ -496,6 +496,8 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
             sl::Extent leftEyeFullExtent{ 0, 0, perEyeOutputWidth, perEyeOutputHeight };
 
             tagResources(leftEyeLowExtent, leftEyeFullExtent, leftEyeColourTexture);
+
+			//upscale left eye into main texture, left half
 			evaluateDLSS();
 
 			if (vrColorEyeTextures.initialized) {
@@ -506,6 +508,8 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 					sl::Extent rightEyeFullExtent{ perEyeOutputWidth, 0, screenOutputWidth, perEyeOutputHeight };
 
 					tagResources(rightEyeLowExtent, rightEyeFullExtent, rightEyeColourTexture);
+
+					//upscale right eye into main texture, right half
 					evaluateDLSS();
 				}
 			}
