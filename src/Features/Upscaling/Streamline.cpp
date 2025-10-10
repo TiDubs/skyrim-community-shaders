@@ -454,6 +454,12 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
         slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
     };
 
+    auto evaluateDLSS = [&]() {
+        sl::ViewportHandle view(viewport);
+        const sl::BaseStructure* inputs[] = { &view };
+        slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+    };
+
     if (globals::game::isVR) {
         winrt::com_ptr<ID3D11Texture2D> colorTexture;
         HRESULT hr = a_upscalingTexture->QueryInterface(colorTexture.put());
@@ -486,6 +492,18 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
             sl::Extent leftEyeFullExtent{ 0, 0, perEyeOutputWidth, perEyeOutputHeight };
 
             tagResources(leftEyeLowExtent, leftEyeFullExtent, colorResource);
+            evaluateDLSS();
+
+            if (vrColorEyeTextures.initialized) {
+                ID3D11Resource* rightEyeResource = vrColorEyeTextures.textures[1].get();
+                if (rightEyeResource) {
+                    sl::Extent rightEyeLowExtent{ 0, 0, perEyeRenderWidth, perEyeRenderHeight };
+                    sl::Extent rightEyeFullExtent{ perEyeOutputWidth, 0, perEyeOutputWidth, perEyeOutputHeight };
+
+                    tagResources(rightEyeLowExtent, rightEyeFullExtent, rightEyeResource);
+                    evaluateDLSS();
+                }
+            }
         } else {
             ReleaseVREyeTextures(vrColorEyeTextures);
 
@@ -493,17 +511,15 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
             sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
             tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+            evaluateDLSS();
         }
     } else {
         sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
         sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
         tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+        evaluateDLSS();
     }
-
-	sl::ViewportHandle view(viewport);
-	const sl::BaseStructure* inputs[] = { &view };
-	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
 float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
