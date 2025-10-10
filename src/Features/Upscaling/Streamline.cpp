@@ -226,43 +226,54 @@ void Streamline::CheckFrameConstants()
 
 		auto state = globals::state;
 
-		sl::Constants slConstants = {};
+                sl::Constants slConstants = {};
 
-		if (globals::game::isVR) {
-			slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
-		} else {
-			slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
-		}
+                auto& upscaling = globals::features::upscaling;
+                auto jitter = upscaling.jitter;
 
-		slConstants.cameraFOV = Util::GetVerticalFOVRad();
-		slConstants.cameraNear = *globals::game::cameraNear;
-		slConstants.cameraFar = *globals::game::cameraFar;
+                slConstants.jitterOffset = { -jitter.x, -jitter.y };
+                slConstants.reset = sl::Boolean::eFalse;
+                slConstants.depthInverted = sl::Boolean::eFalse;
+                slConstants.mvecScale = { 1.0f, 1.0f };
+                slConstants.motionVectors3D = sl::Boolean::eFalse;
+                slConstants.motionVectorsInvalidValue = FLT_MIN;
+                slConstants.orthographicProjection = sl::Boolean::eFalse;
+                slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+                slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
+                if (globals::game::isVR) {
+                        auto screenSize = state->screenSize;
+                        auto renderSize = Util::ConvertToDynamic(screenSize);
 
-		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
-		slConstants.cameraPinholeOffset = { 0.f, 0.f };
-		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
-		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
-		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
-		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
-		slConstants.depthInverted = sl::Boolean::eFalse;
+                        float perEyeRenderWidth = renderSize.x * 0.5f;
+                        float perEyeRenderHeight = renderSize.y;
+                        float perEyeOutputWidth = screenSize.x * 0.5f;
+                        float perEyeOutputHeight = screenSize.y;
 
-		recalculateCameraMatrices(slConstants);
+                        slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
+                        slConstants.renderSize = { perEyeRenderWidth, perEyeRenderHeight };
+                        slConstants.outputSize = { perEyeOutputWidth, perEyeOutputHeight };
+                        slConstants.exposure = 1.0f;
+                        slConstants.isHDR = sl::Boolean::eTrue;
+                        slConstants.sharpness = upscaling.settings.sharpnessDLSS;
+                } else {
+                        slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
+                        slConstants.cameraFOV = Util::GetVerticalFOVRad();
+                        slConstants.cameraNear = *globals::game::cameraNear;
+                        slConstants.cameraFar = *globals::game::cameraFar;
 
-		auto& upscaling = globals::features::upscaling;
-		auto jitter = upscaling.jitter;
-		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = sl::Boolean::eFalse;
+			auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+			auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
 
-		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
-		slConstants.motionVectors3D = sl::Boolean::eFalse;
-		slConstants.motionVectorsInvalidValue = FLT_MIN;
-		slConstants.orthographicProjection = sl::Boolean::eFalse;
-		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
-		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+			slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+			slConstants.cameraPinholeOffset = { 0.f, 0.f };
+			slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
+			slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
+			slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
+			slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
+			slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
+                        recalculateCameraMatrices(slConstants);
+                }
 
 		if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
 			logger::error("[Streamline] Could not set constants");
@@ -330,6 +341,81 @@ void Streamline::SetDLSSOptions()
 	}
 }
 
+void Streamline::ReleaseVREyeTextures(EyeTextureCache& cache)
+{
+	cache.initialized = false;
+	cache.desc = {};
+	for (auto& texture : cache.textures) {
+		texture = nullptr;
+	}
+}
+
+void Streamline::EnsureVREyeTextures(EyeTextureCache& cache, ID3D11Texture2D* source, UINT eyeWidth, UINT eyeHeight)
+{
+	if (!source || eyeWidth == 0 || eyeHeight == 0) {
+		ReleaseVREyeTextures(cache);
+		return;
+	}
+
+	D3D11_TEXTURE2D_DESC desiredDesc{};
+	source->GetDesc(&desiredDesc);
+	if (desiredDesc.Width < eyeWidth * cache.textures.size() || desiredDesc.Height < eyeHeight) {
+		ReleaseVREyeTextures(cache);
+		return;
+	}
+
+	desiredDesc.Width = eyeWidth;
+	desiredDesc.Height = eyeHeight;
+
+	bool needsCreate = !cache.initialized ||
+	cache.desc.Width != desiredDesc.Width ||
+	cache.desc.Height != desiredDesc.Height ||
+	cache.desc.MipLevels != desiredDesc.MipLevels ||
+	cache.desc.ArraySize != desiredDesc.ArraySize ||
+	cache.desc.Format != desiredDesc.Format ||
+	cache.desc.SampleDesc.Count != desiredDesc.SampleDesc.Count ||
+	cache.desc.SampleDesc.Quality != desiredDesc.SampleDesc.Quality ||
+	cache.desc.Usage != desiredDesc.Usage ||
+	cache.desc.BindFlags != desiredDesc.BindFlags ||
+	cache.desc.CPUAccessFlags != desiredDesc.CPUAccessFlags ||
+	cache.desc.MiscFlags != desiredDesc.MiscFlags;
+
+	if (needsCreate) {
+		ReleaseVREyeTextures(cache);
+		for (auto& texture : cache.textures) {
+			DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&desiredDesc, nullptr, texture.put()));
+		}
+		cache.desc = desiredDesc;
+		cache.initialized = true;
+	}
+}
+
+void Streamline::CopyVREyeRegion(ID3D11Texture2D* source, EyeTextureCache& cache, UINT eyeWidth, UINT eyeHeight)
+{
+	if (!source || !cache.initialized || eyeWidth == 0 || eyeHeight == 0) {
+		return;
+	}
+
+	D3D11_TEXTURE2D_DESC srcDesc{};
+	source->GetDesc(&srcDesc);
+	if (srcDesc.Width < eyeWidth * cache.textures.size() || srcDesc.Height < eyeHeight) {
+		ReleaseVREyeTextures(cache);
+		return;
+	}
+
+	D3D11_BOX srcBox{};
+	srcBox.top = 0;
+	srcBox.bottom = eyeHeight;
+	srcBox.front = 0;
+	srcBox.back = 1;
+
+	for (uint32_t eye = 0; eye < cache.textures.size(); ++eye) {
+		srcBox.left = eye * eyeWidth;
+		srcBox.right = srcBox.left + eyeWidth;
+		globals::d3d::context->CopySubresourceRegion(cache.textures[eye].get(), 0, 0, 0, 0, source, 0, &srcBox);
+	}
+}
+
 void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
 {
 	CheckFrameConstants();
@@ -340,33 +426,81 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
-	{
-		auto screenSize = state->screenSize;
-		auto renderSize = Util::ConvertToDynamic(screenSize);
+	auto screenSize = state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-		sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
-		sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+        auto tagResources = [&](const sl::Extent& lowExtent, const sl::Extent& fullExtent, ID3D11Resource* colorInputResource) {
+                if (!colorInputResource) {
+                        return;
+                }
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
-		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
+                sl::Resource colorIn = { sl::ResourceType::eTex2d, colorInputResource, 0 };
+                sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+                sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
+                sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
 
-		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &lowResExtent };
-		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+                sl::ResourceTag colorInTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &lowExtent };
+                sl::ResourceTag colorOutTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+                sl::ResourceTag depthTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &lowExtent };
+                sl::ResourceTag mvecTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &lowExtent };
 
-		sl::Resource reactiveMask = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
-		sl::ResourceTag reactiveMaskTag = sl::ResourceTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+                sl::Resource reactiveMask = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
+                sl::ResourceTag reactiveMaskTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowExtent };
 
-		sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
-		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+                sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
+                sl::ResourceTag transparencyCompositionMaskTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowExtent };
 
-		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
+                sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
 
-		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
-	}
+                slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+        };
+
+        if (globals::game::isVR) {
+                winrt::com_ptr<ID3D11Texture2D> colorTexture;
+                HRESULT hr = a_upscalingTexture->QueryInterface(colorTexture.put());
+                if (FAILED(hr)) {
+                        logger::error("[Streamline] Failed to access VR color texture for eye split (HRESULT {:08X})", static_cast<unsigned int>(hr));
+                }
+
+		ID3D11Resource* colorResource = a_upscalingTexture;
+		UINT perEyeRenderWidth = 0;
+		UINT perEyeRenderHeight = 0;
+
+		if (colorTexture) {
+			D3D11_TEXTURE2D_DESC colorDesc{};
+			colorTexture->GetDesc(&colorDesc);
+			perEyeRenderWidth = colorDesc.Width / 2;
+			perEyeRenderHeight = colorDesc.Height;
+
+			EnsureVREyeTextures(vrColorEyeTextures, colorTexture.get(), perEyeRenderWidth, perEyeRenderHeight);
+			if (vrColorEyeTextures.initialized) {
+				CopyVREyeRegion(colorTexture.get(), vrColorEyeTextures, perEyeRenderWidth, perEyeRenderHeight);
+				colorResource = vrColorEyeTextures.textures[0].get();
+			}
+		}
+
+                if (perEyeRenderWidth > 0 && perEyeRenderHeight > 0 && colorResource != nullptr) {
+                        UINT perEyeOutputWidth = static_cast<UINT>(screenSize.x * 0.5f);
+                        UINT perEyeOutputHeight = static_cast<UINT>(screenSize.y);
+
+                        sl::Extent leftEyeLowExtent{ 0, 0, perEyeRenderWidth, perEyeRenderHeight };
+                        sl::Extent leftEyeFullExtent{ 0, 0, perEyeOutputWidth, perEyeOutputHeight };
+
+                        tagResources(leftEyeLowExtent, leftEyeFullExtent, colorResource);
+                } else {
+                        ReleaseVREyeTextures(vrColorEyeTextures);
+
+                        sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+                        sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+                        tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+                }
+        } else {
+                sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+                sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+                tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+        }
 
 	sl::ViewportHandle view(viewport);
 	const sl::BaseStructure* inputs[] = { &view };
