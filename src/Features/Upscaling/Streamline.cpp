@@ -454,14 +454,21 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
         slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
     };
 
+	auto evaluateDLSS = [&]() {
+		sl::ViewportHandle view(viewport);
+		const sl::BaseStructure* inputs[] = { &view };
+		slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+	};
+
     if (globals::game::isVR) {
+		//copy the input low res colour extent into two external/reused textures (one per eye)
         winrt::com_ptr<ID3D11Texture2D> colorTexture;
         HRESULT hr = a_upscalingTexture->QueryInterface(colorTexture.put());
         if (FAILED(hr)) {
             logger::error("[Streamline] Failed to access VR color texture for eye split (HRESULT {:08X})", static_cast<unsigned int>(hr));
         }
 
-		ID3D11Resource* colorResource = a_upscalingTexture;
+		ID3D11Resource* leftEyeColourTexture = a_upscalingTexture;
 		UINT perEyeRenderWidth = 0;
 		UINT perEyeRenderHeight = 0;
 
@@ -474,36 +481,52 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 			EnsureVREyeTextures(vrColorEyeTextures, colorTexture.get(), perEyeRenderWidth, perEyeRenderHeight);
 			if (vrColorEyeTextures.initialized) {
 				CopyVREyeRegion(colorTexture.get(), vrColorEyeTextures, perEyeRenderWidth, perEyeRenderHeight);
-				colorResource = vrColorEyeTextures.textures[0].get();
+				
+				//after, select the left eye we just copied
+				leftEyeColourTexture = vrColorEyeTextures.textures[0].get();
 			}
 		}
 
-        if (perEyeRenderWidth > 0 && perEyeRenderHeight > 0 && colorResource != nullptr) {
-            UINT perEyeOutputWidth = static_cast<UINT>(screenSize.x * 0.5f);
+        if (perEyeRenderWidth > 0 && perEyeRenderHeight > 0 && leftEyeColourTexture != nullptr) {
+			UINT perEyeOutputWidth = static_cast<UINT>(screenSize.x * 0.5f);
+			UINT screenOutputWidth = static_cast<UINT>(screenSize.x);
             UINT perEyeOutputHeight = static_cast<UINT>(screenSize.y);
 
             sl::Extent leftEyeLowExtent{ 0, 0, perEyeRenderWidth, perEyeRenderHeight };
             sl::Extent leftEyeFullExtent{ 0, 0, perEyeOutputWidth, perEyeOutputHeight };
 
-            tagResources(leftEyeLowExtent, leftEyeFullExtent, colorResource);
-        } else {
-            ReleaseVREyeTextures(vrColorEyeTextures);
+            tagResources(leftEyeLowExtent, leftEyeFullExtent, leftEyeColourTexture);
+			evaluateDLSS();
 
+			if (vrColorEyeTextures.initialized) {
+				//now do right eye
+				ID3D11Resource* rightEyeColourTexture = vrColorEyeTextures.textures[1].get();
+				if (rightEyeColourTexture) {
+					sl::Extent rightEyeLowExtent{ 0, 0, perEyeRenderWidth, perEyeRenderHeight };
+					sl::Extent rightEyeFullExtent{ perEyeOutputWidth, 0, screenOutputWidth, perEyeOutputHeight };
+
+					tagResources(rightEyeLowExtent, rightEyeFullExtent, rightEyeColourTexture);
+					evaluateDLSS();
+				}
+			}
+        } else {
+            //release atleast so no mem leaking
+			ReleaseVREyeTextures(vrColorEyeTextures);
+			
+			//failed, fallback to non-VR, but should not happen - remove whoile block?
             sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
             sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
             tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+			evaluateDLSS();
         }
     } else {
         sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
         sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
         tagResources(lowResExtent, fullExtent, a_upscalingTexture);
+		evaluateDLSS();
     }
-
-	sl::ViewportHandle view(viewport);
-	const sl::BaseStructure* inputs[] = { &view };
-	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
 float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
