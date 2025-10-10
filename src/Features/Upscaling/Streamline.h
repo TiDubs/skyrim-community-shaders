@@ -3,6 +3,7 @@
 #include "../../Buffer.h"
 #include "../../State.h"
 
+#include <array>
 #include <d3d11_4.h>
 #include <d3d12.h>
 
@@ -89,4 +90,18 @@ public:
 	void DestroyDLSSResources();
 
 	void ApplyNISSharpening(ID3D11Resource* a_texture, float sharpness);
+
+private:
+	struct EyeTextureCache
+	{
+		std::array<winrt::com_ptr<ID3D11Texture2D>, 2> textures{};
+		D3D11_TEXTURE2D_DESC desc{};
+		bool initialized = false;
+	};
+
+	void EnsureVREyeTextures(EyeTextureCache& cache, ID3D11Texture2D* source, UINT eyeWidth, UINT eyeHeight);
+	void CopyVREyeRegion(ID3D11Texture2D* source, EyeTextureCache& cache, UINT eyeWidth, UINT eyeHeight);
+	void ReleaseVREyeTextures(EyeTextureCache& cache);
+
+	EyeTextureCache vrColorEyeTextures;
 };
