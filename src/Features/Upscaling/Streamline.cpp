@@ -297,8 +297,17 @@ void Streamline::SetDLSSOptions()
 
 	auto state = globals::state;
 
-	dlssOptions.outputWidth = (uint)state->screenSize.x;
-	dlssOptions.outputHeight = (uint)state->screenSize.y;
+	uint32_t outputWidth = static_cast<uint32_t>(state->screenSize.x);
+	uint32_t outputHeight = static_cast<uint32_t>(state->screenSize.y);
+
+	if (globals::game::isVR) {
+		// In VR the back buffer contains both eyes side-by-side. DLSS operates on a single eye at a time, so expose the per-eye dimensions to
+		// Streamline to avoid stretching the upscaled image to the full stereo width.
+		outputWidth /= 2;
+	}
+
+	dlssOptions.outputWidth = outputWidth;
+	dlssOptions.outputHeight = outputHeight;
 	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
@@ -520,6 +529,11 @@ float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t output
 
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = dlssMode;
+	if (globals::game::isVR) {
+		// DLSS evaluation is performed per-eye in VR. Provide per-eye dimensions when querying optimal render resolution so that the recommended scale matches the actual input size.
+		outputWidth /= 2;
+	}
+
 	dlssOptions.outputWidth = outputWidth;
 	dlssOptions.outputHeight = outputHeight;
 
