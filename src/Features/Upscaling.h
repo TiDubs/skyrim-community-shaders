@@ -56,6 +56,7 @@ public:
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
+		bool debugShowGazeOverlay = false;
 	};
 
 	Settings settings;

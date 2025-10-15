@@ -28,7 +28,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	debugShowGazeOverlay);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -326,6 +327,11 @@ void Upscaling::DrawSettings()
 			true,
 			slSorters);
 		ImGui::TreePop();
+	}
+
+	if (globals::state->IsDeveloperMode()) {
+		// Upscaling menu -> "Debug: Show gaze overlay".
+		ImGui::Checkbox("Debug: Show gaze overlay", &settings.debugShowGazeOverlay);
 	}
 }
 
