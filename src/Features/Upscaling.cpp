@@ -25,10 +25,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	qualityMode,
-	frameLimitMode,
-	frameGenerationMode,
-	frameGenerationForceEnable,
-	streamlineLogLevel);
+        frameLimitMode,
+        frameGenerationMode,
+        frameGenerationForceEnable,
+        streamlineLogLevel,
+        debugShowGazeOverlay);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -281,52 +282,57 @@ void Upscaling::DrawSettings()
 		}
 	}
 
-	if (ImGui::TreeNodeEx("Backend Diagnostics")) {
-		// Streamline log level selection
-		const char* logLevels[] = { "Off", "Default", "Verbose" };
-		int logLevelIdx = static_cast<int>(settings.streamlineLogLevel);
-		if (ImGui::Combo("Streamline Logging", &logLevelIdx, logLevels, IM_ARRAYSIZE(logLevels))) {
-			settings.streamlineLogLevel = static_cast<uint>(logLevelIdx);
-		}
-		ImGui::TextUnformatted("Changing this requires a restart to take effect.");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G.");
-		}
-		ImGui::Separator();
-		// FidelityFX section
-		if (ImGui::Selectable("AMD FidelityFX DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", FidelityFX::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::string> headers = { "DLL Name", "Version" };
-		std::vector<std::vector<std::string>> ffRows;
-		for (const auto& [name, dllVersion] : FidelityFX::dllVersions)
-			ffRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"ffx_dll_versions",
-			headers,
-			ffRows,
-			0,
-			true,
-			ffSorters);
+        if (ImGui::TreeNodeEx("Backend Diagnostics")) {
+                // Streamline log level selection
+                const char* logLevels[] = { "Off", "Default", "Verbose" };
+                int logLevelIdx = static_cast<int>(settings.streamlineLogLevel);
+                if (ImGui::Combo("Streamline Logging", &logLevelIdx, logLevels, IM_ARRAYSIZE(logLevels))) {
+                        settings.streamlineLogLevel = static_cast<uint>(logLevelIdx);
+                }
+                ImGui::TextUnformatted("Changing this requires a restart to take effect.");
+                if (auto _tt = Util::HoverTooltipWrapper()) {
+                        ImGui::Text("Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G.");
+                }
+                ImGui::Separator();
+                // FidelityFX section
+                if (ImGui::Selectable("AMD FidelityFX DLLs (click to open folder)")) {
+                        ShellExecuteW(nullptr, L"open", FidelityFX::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
+                }
+                std::vector<std::string> headers = { "DLL Name", "Version" };
+                std::vector<std::vector<std::string>> ffRows;
+                for (const auto& [name, dllVersion] : FidelityFX::dllVersions)
+                        ffRows.push_back({ name, dllVersion });
+                std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
+                Util::ShowSortedStringTableStrings(
+                        "ffx_dll_versions",
+                        headers,
+                        ffRows,
+                        0,
+                        true,
+                        ffSorters);
 
-		// Streamline section
-		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", Streamline::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::vector<std::string>> slRows;
-		for (const auto& [name, dllVersion] : Streamline::dllVersions)
-			slRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"sl_dll_versions",
-			headers,
-			slRows,
-			0,
-			true,
-			slSorters);
-		ImGui::TreePop();
-	}
+                // Streamline section
+                if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
+                        ShellExecuteW(nullptr, L"open", Streamline::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
+                }
+                std::vector<std::vector<std::string>> slRows;
+                for (const auto& [name, dllVersion] : Streamline::dllVersions)
+                        slRows.push_back({ name, dllVersion });
+                std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
+                Util::ShowSortedStringTableStrings(
+                        "sl_dll_versions",
+                        headers,
+                        slRows,
+                        0,
+                        true,
+                        slSorters);
+                ImGui::TreePop();
+        }
+
+        if (globals::state->IsDeveloperMode()) {
+                // Debug overlay toggle: Upscaling menu -> "Debug: Show gaze overlay".
+                ImGui::Checkbox("Debug: Show gaze overlay", &settings.debugShowGazeOverlay);
+        }
 }
 
 void Upscaling::SaveSettings(json& o_json)

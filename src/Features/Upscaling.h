@@ -47,16 +47,17 @@ public:
 		kDLSS
 	};
 
-	struct Settings
-	{
-		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
-		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
-		uint frameLimitMode = 1;
-		uint frameGenerationMode = 1;
-		uint frameGenerationForceEnable = 0;
-		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
-	};
+        struct Settings
+        {
+                uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
+                uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+                uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
+                uint frameLimitMode = 1;
+                uint frameGenerationMode = 1;
+                uint frameGenerationForceEnable = 0;
+                uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
+                bool debugShowGazeOverlay = false;
+        };
 
 	Settings settings;
 
