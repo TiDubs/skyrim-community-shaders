@@ -6,15 +6,82 @@
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 
+#include <algorithm>
+#include <d3d11.h>
+
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 
+#include "Globals.h"
+
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
+
+#include "Features/Upscaling.h"
+#include "VR/GazeProvider.h"
+
+namespace
+{
+	void DrawGazeOverlay()
+	{
+		auto state = globals::state;
+		if (!state || !state->IsDeveloperMode()) {
+			return;
+		}
+
+		auto& upscaling = globals::features::upscaling;
+		if (!upscaling.settings.debugShowGazeOverlay) {
+			return;
+		}
+
+		if (!globals::game::isVR) {
+			return;
+		}
+
+		auto renderer = globals::game::renderer;
+		if (!renderer) {
+			return;
+		}
+
+		auto& renderTargets = renderer->GetRuntimeData().renderTargets;
+		auto& mainTarget = renderTargets[RE::RENDER_TARGETS::kMAIN];
+		if (!mainTarget.texture) {
+			return;
+		}
+
+		D3D11_TEXTURE2D_DESC mainDesc{};
+		mainTarget.texture->GetDesc(&mainDesc);
+		if (mainDesc.Width == 0 || mainDesc.Height == 0) {
+			return;
+		}
+
+		const float perEyeOutW = static_cast<float>(mainDesc.Width) * 0.5f;
+		const float perEyeOutH = static_cast<float>(mainDesc.Height);
+		if (perEyeOutW <= 0.0f || perEyeOutH <= 0.0f) {
+			return;
+		}
+
+		const auto gaze = GazeProvider::GetCurrentGazeUV();
+
+		const ImVec2 leftOrigin(0.0f, 0.0f);
+		const ImVec2 rightOrigin(perEyeOutW, 0.0f);
+
+		const auto toPixel = [&](const ImVec2& origin, const DirectX::XMFLOAT2& uv) {
+			return ImVec2(origin.x + uv.x * perEyeOutW, origin.y + uv.y * perEyeOutH);
+		};
+
+		const float radius = std::max(16.0f, 0.02f * perEyeOutH);
+		const ImU32 color = gaze.hasGaze ? IM_COL32(0, 255, 0, 255) : IM_COL32(255, 255, 0, 255);
+
+		auto* drawList = ImGui::GetBackgroundDrawList();
+		drawList->AddCircle(toPixel(leftOrigin, gaze.leftUV), radius, color, 0, 2.0f);
+		drawList->AddCircle(toPixel(rightOrigin, gaze.rightUV), radius, color, 0, 2.0f);
+	}
+}
 
 void OverlayRenderer::RenderOverlay(
 	Menu& menu,
@@ -190,6 +257,7 @@ void OverlayRenderer::HandleABTesting()
 
 void OverlayRenderer::FinalizeImGuiFrame()
 {
+	DrawGazeOverlay();
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
